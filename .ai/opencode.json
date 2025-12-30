@@ -1,0 +1,208 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "username": "QK Developer",
+  "model": "opencode/big-pickle",
+  "default_agent": "build",
+  "theme": "catppuccin-mocha",
+  "logLevel": "INFO",
+  "tools": {
+    "bash": true,
+    "edit": true,
+    "read": true,
+    "grep": true,
+    "glob": true,
+    "webfetch": false
+  },
+  "permission": {
+    "edit": "allow",
+    "bash": "ask",
+    "webfetch": "allow",
+    "skill": "allow"
+  },
+  "agent": {
+    "build": {
+      "description": "构建 agent，默认主 agent，用于日常开发工作",
+      "model": "opencode/big-pickle",
+      "temperature": 0.3,
+      "mode": "primary",
+      "maxSteps": 50,
+      "permission": {
+        "bash": {
+          "git status": "allow",
+          "git diff*": "allow",
+          "git log*": "allow",
+          "git show*": "allow",
+          "git add*": "allow",
+          "git commit*": "ask",
+          "git push*": "ask",
+          "git tag*": "ask",
+          "git reset*": "ask",
+          "gh *": "deny",
+          "*": "ask"
+        }
+      }
+    },
+    "plan": {
+      "description": "规划 agent，只读模式，用于分析和审查",
+      "model": "opencode/big-pickle",
+      "temperature": 0.2,
+      "mode": "primary",
+      "maxSteps": 20,
+      "permission": {
+        "edit": "deny",
+        "bash": "deny"
+      }
+    },
+    "product-manager": {
+      "description": "产品经理 agent，负责需求分析和产品规格定义",
+      "model": "opencode/big-pickle",
+      "temperature": 0.4,
+      "mode": "primary",
+      "maxSteps": 15,
+      "prompt": "{file:.ai/modes/product-manager.md}",
+      "permission": {
+        "bash": {
+          "git status": "allow",
+          "git diff*": "allow",
+          "git log*": "allow",
+          "git show*": "allow",
+          "git commit*": "deny",
+          "git push*": "deny",
+          "git tag*": "deny",
+          "git reset*": "deny",
+          "gh *": "deny",
+          "*": "ask"
+        }
+      }
+    },
+    "architect": {
+      "description": "架构师 agent，负责技术设计和架构决策",
+      "model": "opencode/big-pickle",
+      "temperature": 0.3,
+      "mode": "primary",
+      "maxSteps": 20,
+      "prompt": "{file:.ai/modes/architect.md}",
+      "permission": {
+        "bash": {
+          "git status": "allow",
+          "git diff*": "allow",
+          "git log*": "allow",
+          "git show*": "allow",
+          "git commit*": "deny",
+          "git push*": "deny",
+          "git tag*": "deny",
+          "git reset*": "deny",
+          "gh *": "deny",
+          "*": "ask"
+        }
+      }
+    },
+    "implementer": {
+      "description": "实现者 agent，负责编写高质量代码",
+      "model": "opencode/big-pickle",
+      "temperature": 0.3,
+      "mode": "primary",
+      "maxSteps": 30,
+      "prompt": "{file:.ai/modes/implementer.md}",
+      "permission": {
+        "edit": "allow",
+        "bash": {
+          "git status": "allow",
+          "git diff*": "allow",
+          "git log*": "allow",
+          "git show*": "allow",
+          "git add*": "allow",
+          "git commit*": "deny",
+          "git push*": "deny",
+          "git tag*": "deny",
+          "git reset*": "deny",
+          "gh *": "deny",
+          "*": "ask"
+        }
+      }
+    },
+    "code-reviewer": {
+      "description": "代码审查 agent，负责审查代码质量和提出改进建议",
+      "model": "opencode/big-pickle",
+      "temperature": 0.2,
+      "mode": "primary",
+      "maxSteps": 25,
+      "prompt": "{file:.ai/modes/code-reviewer.md}",
+      "permission": {
+        "edit": "ask",
+        "bash": {
+          "git status": "allow",
+          "git diff*": "allow",
+          "git log*": "allow",
+          "git show*": "allow",
+          "git commit*": "deny",
+          "git push*": "deny",
+          "git tag*": "deny",
+          "git reset*": "deny",
+          "gh *": "deny",
+          "*": "ask"
+        }
+      }
+    },
+    "problem-solver": {
+      "description": "问题解决 agent，负责调试问题和提供修复方案",
+      "model": "opencode/big-pickle",
+      "temperature": 0.2,
+      "mode": "primary",
+      "maxSteps": 30,
+      "prompt": "{file:.ai/modes/problem-solver.md}",
+      "permission": {
+        "edit": "allow",
+        "bash": {
+          "git status": "allow",
+          "git diff*": "allow",
+          "git log*": "allow",
+          "git show*": "allow",
+          "git commit*": "deny",
+          "git push*": "deny",
+          "git tag*": "deny",
+          "git reset*": "deny",
+          "gh *": "deny",
+          "*": "ask"
+        }
+      }
+    },
+    "git-specialist": {
+      "description": "Git 专家 agent，负责生成规范的提交信息、PR 描述和版本发布",
+      "model": "opencode/big-pickle",
+      "temperature": 0.2,
+      "mode": "primary",
+      "maxSteps": 15,
+      "prompt": "{file:.ai/modes/git-specialist.md}",
+      "permission": {
+        "bash": {
+          "git status": "allow",
+          "git diff*": "allow",
+          "git log*": "allow",
+          "git show*": "allow",
+          "git add*": "allow",
+          "git commit*": "allow",
+          "git push*": "allow",
+          "git tag*": "allow",
+          "git reset*": "allow",
+          "gh *": "allow",
+          "*": "ask"
+        }
+      }
+    }
+  },
+  "formatter": {
+    "javascript": {
+      "command": ["bun", "prettier", "--stdin"],
+      "extensions": [".mjs", ".js", ".json"]
+    }
+  },
+  "instructions": [
+    ".ai/instructions.md"
+  ],
+  "share": "manual",
+  "compaction": {
+    "auto": true,
+    "prune": true
+  }
+}

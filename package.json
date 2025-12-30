@@ -1,0 +1,42 @@
+{
+  "name": "qk",
+  "version": "1.0.0",
+  "description": "QK CLI - A powerful command-line tool built with ZX and Commander.js",
+  "type": "module",
+  "main": "cli.mjs",
+  "bin": {
+    "qk": "./cli.mjs"
+  },
+  "scripts": {
+    "start": "bun cli.mjs",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "cli",
+    "command-line",
+    "zx",
+    "commander",
+    "tool"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@langchain/core": "^1.1.8",
+    "commander": "^12.1.0",
+    "zx": "^8.8.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2"
+  },
+  "engines": {
+    "bun": ">=1.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": ""
+  },
+  "homepage": "",
+  "bugs": {
+    "url": ""
+  }
+}
