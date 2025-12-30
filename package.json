@@ -1,7 +1,7 @@
 {
   "name": "qk",
   "version": "1.0.0",
-  "description": "乾坤 CLI",
+  "description": "QK CLI - A powerful command-line tool built with ZX and Commander.js",
   "type": "module",
   "main": "cli.mjs",
   "bin": {

@@ -27,11 +27,11 @@ try {
     const scriptPath = join(commandsDir, dir, 'script.mjs');
     const scriptContent = readFileSync(scriptPath, 'utf-8');
     
-    // 提取 JSDoc 中的 @description
+    // Extract @description from JSDoc comments
     const descriptionMatch = scriptContent.match(/@description\s+(.+)/);
     const description = descriptionMatch 
       ? descriptionMatch[1].trim()
-      : `执行 ${dir} 命令`;
+      : `Execute ${dir} command`;
 
     program
       .command(dir)
@@ -42,7 +42,7 @@ try {
       });
   }
 } catch (error) {
-  console.error('加载命令失败:', error.message);
+  console.error('Failed to load commands:', error.message);
   process.exit(1);
 }
 

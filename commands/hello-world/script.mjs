@@ -3,7 +3,7 @@
 import { $ } from 'zx';
 
 /**
- * @description 输出 hello world 消息
+ * @description Print hello world message
  */
 export async function run() {
   console.log('hello world');
