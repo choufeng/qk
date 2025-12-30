@@ -1,0 +1,152 @@
+# QK CLI Release Configuration
+
+# QK CLI Release Configuration
+
+# Changelog configuration
+changelog:
+  categories:
+    - title: "🚀 Features"
+      labels:
+        - "feature"
+        - "enhancement"
+    - title: "🐛 Bug Fixes"
+      labels:
+        - "bug"
+        - "fix"
+    - title: "📦 Documentation"
+      labels:
+        - "documentation"
+        - "docs"
+    - title: "🧪 Testing"
+      labels:
+        - "test"
+        - "testing"
+    - title: "🔧 Maintenance"
+      labels:
+        - "maintenance"
+        - "chore"
+        - "dependencies"
+    - title: "💥 Breaking Changes"
+      labels:
+        - "breaking-change"
+        - "breaking"
+
+  exclude:
+    labels:
+      - "skip-changelog"
+      - "no-changelog"
+
+# Release notes configuration
+release-notes:
+  sections:
+    - title: "🎯 What's New"
+      description: "New features and improvements in this release"
+    - title: "🔧 Technical Details"
+      description: "Technical information and implementation details"
+    - title: "📚 Documentation"
+      description: "Documentation updates and improvements"
+    - title: "🐛 Known Issues"
+      description: "Known issues and limitations"
+
+  default_section: "🎯 What's New"
+
+# Release notes template
+release-template: |
+  ## QK CLI {{version}}
+  
+  ### 🎯 Overview
+  
+  This release of QK CLI includes new features, bug fixes, and improvements to enhance your command-line experience.
+  
+  {{#sections}}
+  {{#if description}}
+  ### {{title}}
+  
+  {{description}}
+  {{/if}}
+  {{/sections}}
+  
+  ### 📦 Installation
+  
+  ```bash
+  # Install from npm
+  npm install -g qk
+  
+  # Or clone and build
+  git clone https://github.com/choufeng/qk.git
+  cd qk
+  bun install
+  bun build cli.mjs --outfile qk --target node
+  ```
+  
+  ### 🔗 Quick Links
+  
+  - [📥 Download Source (tar.gz)](https://github.com/choufeng/qk/archive/refs/tags/{{version}}.tar.gz)
+  - [📥 Download Source (zip)](https://github.com/choufeng/qk/archive/refs/tags/{{version}}.zip)
+  - [📖 Documentation](https://github.com/choufeng/qk/blob/main/README.md)
+  - [🐛 Report Issues](https://github.com/choufeng/qk/issues)
+  
+  ### 🙏 Contributors
+  
+  Thank you to all contributors who made this release possible!
+  
+  ---
+  
+  *Release generated on {{date}}*
+
+# Auto-release configuration
+auto-release:
+  enabled: true
+  trigger: "push"
+  branches:
+    - "main"
+    - "master"
+  tags:
+    pattern: "v*"
+    create_release: true
+  
+  # Assets to include in releases
+  assets:
+    - name: "qk-source.tar.gz"
+      path: "."
+      format: "tar.gz"
+      include:
+        - "commands/**"
+        - "lib/**"
+        - "cli.mjs"
+        - "package.json"
+        - "README.md"
+        - "LICENSE"
+      exclude:
+        - ".git/**"
+        - "node_modules/**"
+        - ".ai/**"
+        - "*.log"
+        - ".DS_Store"
+  
+  # Version validation
+  version:
+    format: "semver"
+    required_prefix: "v"
+    validate_package_json: true
+    validate_tag_consistency: true
+  
+  # Release validation
+  validation:
+    check_git_status: true
+    require_clean_working_directory: true
+    run_tests: true
+    check_dependencies: true
+  
+  # Notification settings
+  notifications:
+    slack:
+      enabled: false
+      webhook_url: "${{ secrets.SLACK_WEBHOOK }}"
+      channel: "#releases"
+    email:
+      enabled: false
+      recipients: []
+    github:
+      enabled: true
+      create_discussion: true

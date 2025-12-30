@@ -1,0 +1,246 @@
+name: Release
+
+# Trigger on version tags (v1.0.0, v2.1.3, etc.)
+on:
+  push:
+    tags:
+      - 'v*'
+
+# Environment variables
+env:
+  NODE_VERSION: '18'
+
+jobs:
+  # Build and test job
+  build-and-test:
+    name: Build and Test
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch full history for release notes
+      
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+      
+      - name: Install dependencies
+        run: bun install
+      
+      - name: Verify project structure
+        run: |
+          echo "📁 Project structure:"
+          find . -type f -name "*.mjs" | head -20
+          echo ""
+          echo "📦 Dependencies:"
+          bun pm ls || true
+      
+      - name: Test CLI functionality
+        run: |
+          echo "🧪 Testing QK CLI..."
+          bun cli.mjs --version
+          bun cli.mjs --help
+          
+          # Test commands
+          echo "Testing hello-world command:"
+          bun cli.mjs hello-world || true
+          
+          echo "Testing release command:"
+          bun cli.mjs release --help || true
+      
+      - name: Validate version consistency
+        run: |
+          echo "🔍 Validating version consistency..."
+          
+          # Get version from package.json
+          PKG_VERSION=$(node -e "console.log(JSON.parse(require('fs').readFileSync('package.json', 'utf8')).version)")
+          echo "Package version: $PKG_VERSION"
+          
+          # Get tag version
+          TAG_VERSION=${GITHUB_REF#refs/tags/}
+          echo "Tag version: $TAG_VERSION"
+          
+          # Normalize versions for comparison
+          PKG_NORMALIZED="v$PKG_VERSION"
+          TAG_NORMALIZED="$TAG_VERSION"
+          
+          if [ "$PKG_NORMALIZED" != "$TAG_NORMALIZED" ]; then
+            echo "❌ Version mismatch: package.json ($PKG_NORMALIZED) != tag ($TAG_NORMALIZED)"
+            exit 1
+          else
+            echo "✅ Version consistency verified"
+          fi
+
+  # Create GitHub Release
+  create-release:
+    name: Create GitHub Release
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch full history for changelog
+      
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+      
+      - name: Install dependencies
+        run: bun install
+      
+      - name: Extract version and metadata
+        id: metadata
+        run: |
+          # Extract version from tag
+          VERSION=${GITHUB_REF#refs/tags/}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          
+          # Extract version components
+          if [[ "$VERSION" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)(-.+)?$ ]]; then
+            MAJOR=${BASH_REMATCH[1]}
+            MINOR=${BASH_REMATCH[2]}
+            PATCH=${BASH_REMATCH[3]}
+            PRERELEASE=${BASH_REMATCH[4]:-}
+            
+            echo "major=$MAJOR" >> $GITHUB_OUTPUT
+            echo "minor=$MINOR" >> $GITHUB_OUTPUT
+            echo "patch=$PATCH" >> $GITHUB_OUTPUT
+            echo "prerelease=$PRERELEASE" >> $GITHUB_OUTPUT
+            
+            # Determine if this is a prerelease
+            if [ -n "$PRERELEASE" ]; then
+              echo "is_prerelease=true" >> $GITHUB_OUTPUT
+            else
+              echo "is_prerelease=false" >> $GITHUB_OUTPUT
+            fi
+          fi
+          
+          echo "📋 Release metadata:"
+          echo "Version: $VERSION"
+          echo "Major: $MAJOR"
+          echo "Minor: $MINOR"
+          echo "Patch: $PATCH"
+          echo "Prerelease: $PRERELEASE"
+      
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Get previous tag for changelog
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          
+          if [ -n "$PREVIOUS_TAG" ]; then
+            echo "📝 Generating changelog from $PREVIOUS_TAG to ${{ steps.metadata.outputs.version }}"
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)" ${PREVIOUS_TAG}..HEAD)
+          else
+            echo "📝 No previous tag found, generating changelog from first commit"
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)")
+          fi
+          
+          # Create release notes
+          RELEASE_NOTES="## QK CLI ${{ steps.metadata.outputs.version }}
+          
+          ### 📦 Installation
+          
+          \`\`\`bash
+          # Install via npm
+          npm install -g qk
+          
+          # Or clone and build
+          git clone https://github.com/choufeng/qk.git
+          cd qk
+          bun install
+          bun build cli.mjs --outfile qk --target node
+          \`\`\`
+          
+          ### 📋 Changes
+          
+          $CHANGELOG
+          
+          ### 🚀 Features
+          
+          - Modular command system with auto-discovery
+          - AI-powered chat integration
+          - Release management with automated versioning
+          - Built with Bun, ZX, and Commander.js
+          
+          ---
+          
+          *This release was automatically generated on $(date -u +"%Y-%m-%d %H:%M:%S UTC")*
+          "
+          
+          # Save changelog to file
+          echo "$RELEASE_NOTES" > CHANGELOG.md
+          
+          # Set output for GitHub step
+          {
+            echo "changelog<<EOF"
+            echo "$RELEASE_NOTES"
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
+          
+          echo "📄 Changelog generated successfully"
+      
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: QK CLI ${{ steps.metadata.outputs.version }}
+          body: ${{ steps.changelog.outputs.changelog }}
+          draft: false
+          prerelease: ${{ steps.metadata.outputs.is_prerelease }}
+      
+      - name: Upload Release Assets (Manual)
+        run: |
+          echo "📦 GitHub automatically generates source archives:"
+          echo "• https://github.com/choufeng/qk/archive/refs/tags/${{ steps.metadata.outputs.version }}.tar.gz"
+          echo "• https://github.com/choufeng/qk/archive/refs/tags/${{ steps.metadata.outputs.version }}.zip"
+          echo ""
+          echo "✅ Release created successfully!"
+          echo "🔗 Release URL: ${{ steps.create_release.outputs.html_url }}"
+      
+      - name: Update package.json (if needed)
+        if: steps.metadata.outputs.prerelease == ''
+        run: |
+          echo "🔄 Updating package.json for stable release..."
+          # This could be used to trigger npm publish in the future
+          echo "Package version: ${{ steps.metadata.outputs.version }}"
+          echo "Ready for npm publish (manual step)"
+
+  # Notify completion
+  notify:
+    name: Notify Release Completion
+    needs: [build-and-test, create-release]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+      - name: Release Status
+        run: |
+          echo "🚀 QK CLI Release Status"
+          echo "=========================="
+          echo "Tag: ${{ github.ref_name }}"
+          echo "Repository: ${{ github.repository }}"
+          echo "Workflow: ${{ github.workflow }}"
+          echo "Run ID: ${{ github.run_id }}"
+          echo ""
+          echo "Build Status: ${{ needs.build-and-test.result }}"
+          echo "Release Status: ${{ needs.create-release.result }}"
+          echo ""
+          if [ "${{ needs.create-release.result }}" == "success" ]; then
+            echo "✅ Release completed successfully!"
+            echo "📦 Archives available at:"
+            echo "• https://github.com/choufeng/qk/archive/refs/tags/${{ github.ref_name }}.tar.gz"
+            echo "• https://github.com/choufeng/qk/archive/refs/tags/${{ github.ref_name }}.zip"
+          else
+            echo "❌ Release failed or was skipped"
+          fi
