@@ -35,10 +35,12 @@ try {
 
     program
       .command(dir)
+      .argument('[args...]', 'Optional arguments for the command')
       .description(description)
-      .action(async () => {
+      .action(async (...args) => {
         const { default: run } = await import(`./commands/${dir}/script.mjs`);
-        await run();
+        // Pass all arguments to the command
+        await run(args);
       });
   }
 } catch (error) {
