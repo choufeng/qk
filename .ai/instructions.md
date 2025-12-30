@@ -136,44 +136,41 @@ const promptArgs = flatArgs.filter(arg =>
 
 本项目使用 OpenCode 作为 AI 助手，配置了完整的 agent 体系。
 
-### Agent 类型
+### Agent 列表（Primary Mode）
 
-#### 主 Agent（Primary Agents）
+所有 agent 都是 Primary Agent，只能通过 **Tab 键切换** 或 **重新选择** 使用，不能自动相互调用。
 
-| Agent | 描述 | 使用场景 |
-|-------|------|----------|
-| `build` | 构建 agent，默认主 agent | 日常开发、代码修改 |
-| `plan` | 规划 agent，只读模式 | 分析代码、审查建议 |
+| Agent | 描述 | 用途 |
+|-------|------|------|
+| `build` | 构建 agent，默认 | 日常开发、代码修改 |
+| `plan` | 规划 agent，只读 | 分析代码、审查建议 |
+| `product-manager` | 产品经理 | 需求分析和产品规格 |
+| `architect` | 架构师 | 技术设计和架构决策 |
+| `implementer` | 实现者 | 代码实现和编写 |
+| `code-reviewer` | 代码审查 | 代码质量和改进建议 |
+| `problem-solver` | 问题解决 | 调试问题和修复方案 |
+| `git-specialist` | Git 专家 | Git 操作和版本发布 |
 
-**切换方式**: 使用 Tab 键循环切换
+### 使用方式
 
-#### 子 Agent（Subagents）
+**切换 agent**: 使用 **Tab 键** 循环切换不同的 agent
 
-| Agent | 描述 | 使用方式 |
-|-------|------|----------|
-| `@product-manager` | 产品经理，需求分析 | `@product-manager 我需要一个密码生成命令` |
-| `@architect` | 架构师，技术设计 | `@architect 设计一个数据库命令` |
-| `@implementer` | 实现者，代码编写 | `@implementer 实现密码生成逻辑` |
-| `@code-reviewer` | 代码审查员，质量把关 | `@code-reviewer 审查这个 PR` |
-| `@problem-solver` | 问题解决者，调试修复 | `@problem-solver 命令崩溃了` |
-| `@git-specialist` | Git 专家，提交/PR | `@git-specialist 生成提交信息` |
+**选择 agent**: 告诉 OpenCode 你想使用的 agent，例如：
+- "请使用 product-manager 分析这个需求"
+- "切换到 architect 设计这个功能"
+- "用 implementer 实现这段代码"
 
 ### 工作流程
 
 ```
-用户需求
-   ↓
-@product-manager → 需求规格文档
-   ↓
-@architect → 技术设计方案
-   ↓
-@implementer → 代码实现
-   ↓
-@code-reviewer → 代码审查
-   ↓
-@problem-solver → 调试/修复问题
-   ↓
-@git-specialist → 提交信息、PR 描述、版本发布
+人工选择 agent，按需切换：
+
+需求分析       → 切换到 product-manager
+技术设计       → 切换到 architect
+代码实现       → 切换到 implementer
+代码审查       → 切换到 code-reviewer
+调试修复       → 切换到 problem-solver
+Git 提交       → 切换到 git-specialist
 ```
 
 ### 配置文件
@@ -197,14 +194,13 @@ const promptArgs = flatArgs.filter(arg =>
 
 每个 agent 可配置以下属性：
 - `description`: 简要描述
-- `mode`: `primary` 或 `subagent`
+- `mode`: `primary`（所有 agent 都是 primary）
 - `model`: 使用的模型
 - `temperature`: 温度（0.0-1.0）
 - `maxSteps`: 最大迭代次数
 - `prompt`: 引用外部 prompt 文件
 - `tools`: 工具权限
 - `permission`: 操作权限（`allow`/`ask`/`deny`）
-- `disable`: 是否禁用（`true`/`false`）
 
 ### 成本控制
 

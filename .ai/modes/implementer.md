@@ -1,7 +1,7 @@
 ---
 description: 实现者 agent，负责根据架构设计和需求编写高质量代码
 mode: subagent
-model: opencode/big-pickle
+model: openrouter/claude-sonnet-4.5
 temperature: 0.3
 disable: false
 tools:

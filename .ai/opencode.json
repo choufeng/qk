@@ -21,14 +21,29 @@
   },
   "agent": {
     "build": {
-      "description": "用于构建、编写和修改代码的 agent",
+      "description": "构建 agent，默认主 agent，用于日常开发工作",
       "model": "opencode/big-pickle",
       "temperature": 0.3,
       "mode": "primary",
-      "maxSteps": 50
+      "maxSteps": 50,
+      "permission": {
+        "bash": {
+          "git status": "allow",
+          "git diff*": "allow",
+          "git log*": "allow",
+          "git show*": "allow",
+          "git add*": "allow",
+          "git commit*": "ask",
+          "git push*": "ask",
+          "git tag*": "ask",
+          "git reset*": "ask",
+          "gh *": "deny",
+          "*": "ask"
+        }
+      }
     },
     "plan": {
-      "description": "规划和分析 agent，用于审查建议而不做代码更改",
+      "description": "规划 agent，只读模式，用于分析和审查",
       "model": "opencode/big-pickle",
       "temperature": 0.2,
       "mode": "primary",
@@ -39,10 +54,12 @@
       }
     },
     "product-manager": {
-      "description": "产品经理 agent，负责将需求转化为产品规格",
-      "mode": "subagent",
-      "prompt": "{file:.ai/modes/product-manager.md}",
+      "description": "产品经理 agent，负责需求分析和产品规格定义",
+      "model": "opencode/big-pickle",
+      "temperature": 0.4,
+      "mode": "primary",
       "maxSteps": 15,
+      "prompt": "{file:.ai/modes/product-manager.md}",
       "permission": {
         "bash": {
           "git status": "allow",
@@ -60,9 +77,11 @@
     },
     "architect": {
       "description": "架构师 agent，负责技术设计和架构决策",
-      "mode": "subagent",
-      "prompt": "{file:.ai/modes/architect.md}",
+      "model": "opencode/big-pickle",
+      "temperature": 0.3,
+      "mode": "primary",
       "maxSteps": 20,
+      "prompt": "{file:.ai/modes/architect.md}",
       "permission": {
         "bash": {
           "git status": "allow",
@@ -80,9 +99,11 @@
     },
     "implementer": {
       "description": "实现者 agent，负责编写高质量代码",
-      "mode": "subagent",
-      "prompt": "{file:.ai/modes/implementer.md}",
+      "model": "opencode/big-pickle",
+      "temperature": 0.3,
+      "mode": "primary",
       "maxSteps": 30,
+      "prompt": "{file:.ai/modes/implementer.md}",
       "permission": {
         "edit": "allow",
         "bash": {
@@ -101,10 +122,12 @@
       }
     },
     "code-reviewer": {
-      "description": "代码审查员 agent，负责审查代码质量和提出改进建议",
-      "mode": "subagent",
-      "prompt": "{file:.ai/modes/code-reviewer.md}",
+      "description": "代码审查 agent，负责审查代码质量和提出改进建议",
+      "model": "opencode/big-pickle",
+      "temperature": 0.2,
+      "mode": "primary",
       "maxSteps": 25,
+      "prompt": "{file:.ai/modes/code-reviewer.md}",
       "permission": {
         "edit": "ask",
         "bash": {
@@ -122,10 +145,12 @@
       }
     },
     "problem-solver": {
-      "description": "问题解决者 agent，负责调试问题和提供修复方案",
-      "mode": "subagent",
-      "prompt": "{file:.ai/modes/problem-solver.md}",
+      "description": "问题解决 agent，负责调试问题和提供修复方案",
+      "model": "opencode/big-pickle",
+      "temperature": 0.2,
+      "mode": "primary",
       "maxSteps": 30,
+      "prompt": "{file:.ai/modes/problem-solver.md}",
       "permission": {
         "edit": "allow",
         "bash": {
@@ -144,9 +169,11 @@
     },
     "git-specialist": {
       "description": "Git 专家 agent，负责生成规范的提交信息、PR 描述和版本发布",
-      "mode": "subagent",
-      "prompt": "{file:.ai/modes/git-specialist.md}",
+      "model": "opencode/big-pickle",
+      "temperature": 0.2,
+      "mode": "primary",
       "maxSteps": 15,
+      "prompt": "{file:.ai/modes/git-specialist.md}",
       "permission": {
         "bash": {
           "git status": "allow",

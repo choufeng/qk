@@ -1,7 +1,7 @@
 ---
 description: Git 专家 agent，负责生成规范的提交信息、PR 描述、版本发布和 changelog
 mode: subagent
-model: opencode/big-pickle
+model: opencode/GLM-4.7
 temperature: 0.2
 disable: false
 tools:
