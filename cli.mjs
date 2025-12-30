@@ -25,10 +25,17 @@ try {
 
   for (const dir of commandDirs) {
     const scriptPath = join(commandsDir, dir, 'script.mjs');
+    const scriptContent = readFileSync(scriptPath, 'utf-8');
+    
+    // 提取 JSDoc 中的 @description
+    const descriptionMatch = scriptContent.match(/@description\s+(.+)/);
+    const description = descriptionMatch 
+      ? descriptionMatch[1].trim()
+      : `执行 ${dir} 命令`;
 
     program
       .command(dir)
-      .description(`执行 ${dir} 命令`)
+      .description(description)
       .action(async () => {
         const { default: run } = await import(`./commands/${dir}/script.mjs`);
         await run();
