@@ -1,0 +1,181 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "username": "QK Developer",
+  "model": "opencode/big-pickle",
+  "default_agent": "build",
+  "theme": "catppuccin-mocha",
+  "logLevel": "INFO",
+  "tools": {
+    "bash": true,
+    "edit": true,
+    "read": true,
+    "grep": true,
+    "glob": true,
+    "webfetch": false
+  },
+  "permission": {
+    "edit": "allow",
+    "bash": "ask",
+    "webfetch": "allow",
+    "skill": "allow"
+  },
+  "agent": {
+    "build": {
+      "description": "用于构建、编写和修改代码的 agent",
+      "model": "opencode/big-pickle",
+      "temperature": 0.3,
+      "mode": "primary",
+      "maxSteps": 50
+    },
+    "plan": {
+      "description": "规划和分析 agent，用于审查建议而不做代码更改",
+      "model": "opencode/big-pickle",
+      "temperature": 0.2,
+      "mode": "primary",
+      "maxSteps": 20,
+      "permission": {
+        "edit": "deny",
+        "bash": "deny"
+      }
+    },
+    "product-manager": {
+      "description": "产品经理 agent，负责将需求转化为产品规格",
+      "mode": "subagent",
+      "prompt": "{file:.ai/modes/product-manager.md}",
+      "maxSteps": 15,
+      "permission": {
+        "bash": {
+          "git status": "allow",
+          "git diff*": "allow",
+          "git log*": "allow",
+          "git show*": "allow",
+          "git commit*": "deny",
+          "git push*": "deny",
+          "git tag*": "deny",
+          "git reset*": "deny",
+          "gh *": "deny",
+          "*": "ask"
+        }
+      }
+    },
+    "architect": {
+      "description": "架构师 agent，负责技术设计和架构决策",
+      "mode": "subagent",
+      "prompt": "{file:.ai/modes/architect.md}",
+      "maxSteps": 20,
+      "permission": {
+        "bash": {
+          "git status": "allow",
+          "git diff*": "allow",
+          "git log*": "allow",
+          "git show*": "allow",
+          "git commit*": "deny",
+          "git push*": "deny",
+          "git tag*": "deny",
+          "git reset*": "deny",
+          "gh *": "deny",
+          "*": "ask"
+        }
+      }
+    },
+    "implementer": {
+      "description": "实现者 agent，负责编写高质量代码",
+      "mode": "subagent",
+      "prompt": "{file:.ai/modes/implementer.md}",
+      "maxSteps": 30,
+      "permission": {
+        "edit": "allow",
+        "bash": {
+          "git status": "allow",
+          "git diff*": "allow",
+          "git log*": "allow",
+          "git show*": "allow",
+          "git add*": "allow",
+          "git commit*": "deny",
+          "git push*": "deny",
+          "git tag*": "deny",
+          "git reset*": "deny",
+          "gh *": "deny",
+          "*": "ask"
+        }
+      }
+    },
+    "code-reviewer": {
+      "description": "代码审查员 agent，负责审查代码质量和提出改进建议",
+      "mode": "subagent",
+      "prompt": "{file:.ai/modes/code-reviewer.md}",
+      "maxSteps": 25,
+      "permission": {
+        "edit": "ask",
+        "bash": {
+          "git status": "allow",
+          "git diff*": "allow",
+          "git log*": "allow",
+          "git show*": "allow",
+          "git commit*": "deny",
+          "git push*": "deny",
+          "git tag*": "deny",
+          "git reset*": "deny",
+          "gh *": "deny",
+          "*": "ask"
+        }
+      }
+    },
+    "problem-solver": {
+      "description": "问题解决者 agent，负责调试问题和提供修复方案",
+      "mode": "subagent",
+      "prompt": "{file:.ai/modes/problem-solver.md}",
+      "maxSteps": 30,
+      "permission": {
+        "edit": "allow",
+        "bash": {
+          "git status": "allow",
+          "git diff*": "allow",
+          "git log*": "allow",
+          "git show*": "allow",
+          "git commit*": "deny",
+          "git push*": "deny",
+          "git tag*": "deny",
+          "git reset*": "deny",
+          "gh *": "deny",
+          "*": "ask"
+        }
+      }
+    },
+    "git-specialist": {
+      "description": "Git 专家 agent，负责生成规范的提交信息、PR 描述和版本发布",
+      "mode": "subagent",
+      "prompt": "{file:.ai/modes/git-specialist.md}",
+      "maxSteps": 15,
+      "permission": {
+        "bash": {
+          "git status": "allow",
+          "git diff*": "allow",
+          "git log*": "allow",
+          "git show*": "allow",
+          "git add*": "allow",
+          "git commit*": "allow",
+          "git push*": "allow",
+          "git tag*": "allow",
+          "git reset*": "allow",
+          "gh *": "allow",
+          "*": "ask"
+        }
+      }
+    }
+  },
+  "formatter": {
+    "javascript": {
+      "command": ["bun", "prettier", "--stdin"],
+      "extensions": [".mjs", ".js", ".json"]
+    }
+  },
+  "instructions": [
+    ".ai/instructions.md"
+  ],
+  "share": "manual",
+  "compaction": {
+    "auto": true,
+    "prune": true
+  }
+}
