@@ -21,8 +21,8 @@ export async function run(args) {
     console.log('Usage: qk pack <config-name>');
     console.log('');
     console.log('Examples:');
-    console.log('  qk pack example    # Use configs/pack-example.json');
-    console.log('  qk pack my-config  # Use configs/pack-my-config.json');
+    console.log('  qk pack example    # Use ~/.config/qk/pack-example.json');
+    console.log('  qk pack my-config  # Use ~/.config/qk/pack-my-config.json');
     process.exit(1);
   }
 
