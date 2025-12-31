@@ -3,8 +3,10 @@
     "name": "package-a",
     "type": "package",
     "dir": "$HOME/development/tests/package-a",
-    "commands": ["pnpm build"],
-    "auto_pack": true
+    "commands": [
+      "pnpm build",
+      "pnpm pack"
+    ]
   },
   {
     "name": "package-b",
@@ -13,9 +15,9 @@
     "depends_on": "package-a",
     "commands": [
       "pnpm install {{package-a}}",
-      "pnpm build"
-    ],
-    "auto_pack": true
+      "pnpm build",
+      "pnpm pack"
+    ]
   },
   {
     "name": "app-c",
