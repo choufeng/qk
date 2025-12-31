@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { readFileSync, writeFileSync, existsSync, unlinkSync, readdirSync, statSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, unlinkSync, readdirSync, statSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 import { spawn } from 'child_process';
@@ -15,10 +15,20 @@ import { spawn } from 'child_process';
  * @returns {Promise<Object[]>} 配置数组
  */
 export async function loadConfig(configName) {
-  const configPath = join(process.cwd(), 'configs', `pack-${configName}.json`);
+  const configDir = join(homedir(), '.config', 'qk');
+  const configPath = join(configDir, `pack-${configName}.json`);
+
+  // 自动创建配置目录（如果不存在）
+  if (!existsSync(configDir)) {
+    try {
+      mkdirSync(configDir, { recursive: true });
+    } catch (error) {
+      throw new Error(`Failed to create config directory: ${configDir}`);
+    }
+  }
 
   if (!existsSync(configPath)) {
-    throw new Error(`Configuration file not found: configs/pack-${configName}.json`);
+    throw new Error(`Configuration file not found: ${configPath}`);
   }
 
   try {
