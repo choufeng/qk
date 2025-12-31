@@ -56,10 +56,6 @@ export async function loadConfig(configName) {
       if (!['package', 'app'].includes(item.type)) {
         throw new Error(`Item "${item.name}" has invalid type: "${item.type}" (must be "package" or "app")`);
       }
-
-      if (item.type === 'package' && item.auto_pack === undefined) {
-        item.auto_pack = true; // 默认对 package 启用 auto_pack
-      }
     }
 
     return config;
@@ -497,13 +493,7 @@ export async function executePackageItem(item, dependencyOutputs) {
       }
     }
 
-    // 5. 执行 pnpm pack
-    if (item.auto_pack) {
-      console.log(`     📦 Execute: pnpm pack`);
-      await executeCommand('pnpm pack', dir, dependencyOutputs);
-    }
-
-    // 6. 查找生成的 .tgz 文件
+    // 5. 查找生成的 .tgz 文件
     const tgzPath = findTgzFile(dir, item.name, alphaVersion);
     console.log(`     ✅ Generated: ${tgzPath}`);
 
