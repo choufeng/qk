@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { readFileSync, writeFileSync, existsSync, unlinkSync, readdirSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, unlinkSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 import { spawn } from 'child_process';
@@ -254,6 +254,32 @@ export function updatePackageVersion(dir, newVersion) {
 }
 
 /**
+ * 更新 package.json 中的依赖路径
+ * @param {string} dir - package 目录
+ * @param {string} depName - 依赖名称
+ * @param {string} depPath - 新的依赖路径
+ */
+export function updatePackageDependency(dir, depName, depPath) {
+  const packageJsonPath = join(dir, 'package.json');
+  const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8'));
+
+  // 支持 dependencies、devDependencies 和 peerDependencies
+  const depTypes = ['dependencies', 'devDependencies', 'peerDependencies'];
+  let modified = false;
+
+  for (const depType of depTypes) {
+    if (packageJson[depType] && packageJson[depType][depName]) {
+      packageJson[depType][depName] = depPath;
+      modified = true;
+    }
+  }
+
+  if (modified) {
+    writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2) + '\n');
+  }
+}
+
+/**
  * 生成时间戳
  * @returns {string} 格式：YYYYMMDDHHmmss
  */
@@ -334,13 +360,12 @@ export function findTgzFile(dir, packageName, version) {
   // 按修改时间排序，返回最新的
   const sortedFiles = files.map(file => ({
     name: file,
-    path: join(dir, file),
-    mtime: existsSync(join(dir, file)) ? existsSync(join(dir, file)) : 0
+    path: join(dir, file)
   })).sort((a, b) => {
     try {
-      const statA = readFileSync(a.path);
-      const statB = readFileSync(b.path);
-      return statB.mtime - statA.mtime;
+      const statA = statSync(a.path).mtimeMs;
+      const statB = statSync(b.path).mtimeMs;
+      return statB - statA; // 降序，最新的在前
     } catch {
       return 0;
     }
@@ -412,8 +437,12 @@ export async function executeCommand(command, dir, dependencyOutputs) {
  */
 export async function executePackageItem(item, dependencyOutputs) {
   const dir = resolvePath(item.dir);
+  const packageJsonPath = join(dir, 'package.json');
   const originalVersion = readPackageVersion(dir);
   const alphaVersion = generateAlphaVersion(originalVersion);
+
+  // 备份原始 package.json 内容，确保执行后恢复
+  const originalPackageJsonContent = readFileSync(packageJsonPath, 'utf-8');
 
   console.log(`  📦 Package: ${item.name}`);
   console.log(`     Version: ${originalVersion} → ${alphaVersion}`);
@@ -426,29 +455,53 @@ export async function executePackageItem(item, dependencyOutputs) {
     cleanTgzFiles(dir);
     console.log('     🧹 Cleaned old .tgz files');
 
-    // 3. 执行命令序列
+    // 3. 如果有依赖项，清除 node_modules 并更新 package.json 依赖路径
+    if (item.depends_on && dependencyOutputs[item.depends_on]) {
+      console.log('     🗑️  Clear node_modules');
+      await executeCommand('rm -rf node_modules', dir, {});
+      
+      // 更新 package.json 中的依赖路径为新的 tarball 路径
+      const depTgzPath = dependencyOutputs[item.depends_on];
+      const depName = item.depends_on.split('/').pop();
+      console.log(`     📝 Update ${depName} dependency to ${depTgzPath.split('/').pop()}`);
+      updatePackageDependency(dir, depName, `file:${depTgzPath}`);
+    }
+
+    // 4. 执行命令序列（替换 {{package-name}} 占位符）
     if (item.commands && item.commands.length > 0) {
       for (const command of item.commands) {
-        console.log(`     ⚡ Execute: ${command}`);
-        await executeCommand(command, dir, dependencyOutputs);
+        let modifiedCommand = command;
+        
+        // 如果命令是 pnpm install
+        if (command.startsWith('pnpm install')) {
+          // 如果包含 tarball 路径，添加 --force
+          if (command.includes('.tgz')) {
+            modifiedCommand = modifiedCommand.replace(/^(pnpm install)/, '$1 --force');
+          }
+          // 添加 --ignore-workspace 以避免 workspace 依赖解析错误
+          modifiedCommand += ' --ignore-workspace';
+        }
+        
+        console.log(`     ⚡ Execute: ${modifiedCommand}`);
+        await executeCommand(modifiedCommand, dir, dependencyOutputs);
       }
     }
 
-    // 4. 执行 pnpm pack
+    // 5. 执行 pnpm pack
     if (item.auto_pack) {
       console.log(`     📦 Execute: pnpm pack`);
       await executeCommand('pnpm pack', dir, dependencyOutputs);
     }
 
-    // 5. 查找生成的 .tgz 文件
+    // 6. 查找生成的 .tgz 文件
     const tgzPath = findTgzFile(dir, item.name, alphaVersion);
     console.log(`     ✅ Generated: ${tgzPath}`);
 
     return tgzPath;
   } finally {
-    // 6. 恢复原始 version
-    updatePackageVersion(dir, originalVersion);
-    console.log(`     🔄 Version restored: ${originalVersion}`);
+    // 7. 恢复原始 package.json（包括 version 和 dependencies）
+    writeFileSync(packageJsonPath, originalPackageJsonContent);
+    console.log(`     🔄 package.json restored for ${item.name}`);
   }
 }
 
@@ -460,14 +513,52 @@ export async function executePackageItem(item, dependencyOutputs) {
  */
 export async function executeAppItem(item, dependencyOutputs) {
   const dir = resolvePath(item.dir);
+  const packageJsonPath = join(dir, 'package.json');
+
+  // 备份原始 package.json 内容，确保执行后恢复
+  const originalPackageJsonContent = existsSync(packageJsonPath)
+    ? readFileSync(packageJsonPath, 'utf-8')
+    : null;
 
   console.log(`  🚀 App: ${item.name}`);
 
-  // 执行命令序列
-  if (item.commands && item.commands.length > 0) {
-    for (const command of item.commands) {
-      console.log(`     ⚡ Execute: ${command}`);
-      await executeCommand(command, dir, dependencyOutputs);
+  try {
+    // 1. 如果有依赖项，清除 node_modules 并更新 package.json 依赖路径
+    if (item.depends_on && dependencyOutputs[item.depends_on]) {
+      console.log('     🗑️  Clear node_modules');
+      await executeCommand('rm -rf node_modules', dir, {});
+
+      // 更新 package.json 中的依赖路径为新的 tarball 路径
+      const depTgzPath = dependencyOutputs[item.depends_on];
+      const depName = item.depends_on.split('/').pop();
+      console.log(`     📝 Update ${depName} dependency to ${depTgzPath.split('/').pop()}`);
+      updatePackageDependency(dir, depName, `file:${depTgzPath}`);
+    }
+
+    // 2. 执行命令序列
+    if (item.commands && item.commands.length > 0) {
+      for (const command of item.commands) {
+        let modifiedCommand = command;
+
+        // 如果命令是 pnpm install
+        if (command.startsWith('pnpm install')) {
+          // 如果包含 tarball 路径，添加 --force
+          if (command.includes('.tgz')) {
+            modifiedCommand = modifiedCommand.replace(/^(pnpm install)/, '$1 --force');
+          }
+          // 添加 --ignore-workspace 以避免 workspace 依赖解析错误
+          modifiedCommand += ' --ignore-workspace';
+        }
+
+        console.log(`     ⚡ Execute: ${modifiedCommand}`);
+        await executeCommand(modifiedCommand, dir, dependencyOutputs);
+      }
+    }
+  } finally {
+    // 3. 恢复原始 package.json
+    if (originalPackageJsonContent) {
+      writeFileSync(packageJsonPath, originalPackageJsonContent);
+      console.log(`     🔄 package.json restored for ${item.name}`);
     }
   }
 }
