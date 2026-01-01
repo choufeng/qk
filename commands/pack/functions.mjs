@@ -3,7 +3,7 @@
 import { readFileSync, writeFileSync, existsSync, unlinkSync, readdirSync, statSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
-import { spawn } from 'child_process';
+import { processManager } from '../../lib/process-manager.mjs';
 
 // ============================================================================
 // Configuration Loading
@@ -513,25 +513,14 @@ export async function executeCommand(command, dir, dependencyOutputs) {
   const cmd = parts[0];
   const args = parts.slice(1);
 
-  return new Promise((resolve, reject) => {
-    const proc = spawn(cmd, args, {
+  try {
+    await processManager.executeCommand(cmd, args, {
       cwd: dir,
-      stdio: 'inherit',
       shell: false
     });
-
-    proc.on('close', (code) => {
-      if (code === 0) {
-        resolve();
-      } else {
-        reject(new Error(`Command "${resolvedCommand}" exited with code ${code}`));
-      }
-    });
-
-    proc.on('error', (error) => {
-      reject(new Error(`Failed to execute "${resolvedCommand}": ${error.message}`));
-    });
-  });
+  } catch (error) {
+    throw new Error(`Failed to execute "${resolvedCommand}": ${error.message}`);
+  }
 }
 
 /**

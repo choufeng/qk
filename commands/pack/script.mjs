@@ -1,11 +1,15 @@
 #!/usr/bin/env bun
 
 import { loadConfig, executeChain } from './functions.mjs';
+import { processManager } from '../../lib/process-manager.mjs';
 
 /**
  * @description Chain-build packages and apps based on dependency order
  */
 export async function run(args) {
+  // 注册进程管理器的清理处理器
+  processManager.registerCleanupHandlers();
+
   // 扁平化参数并过滤有效参数
   const flatArgs = args.flat();
   const validArgs = flatArgs.filter(arg =>
@@ -40,9 +44,22 @@ export async function run(args) {
 
     // 执行链式打包
     await executeChain(items);
+    
+    // 正常完成时也清理一下
+    if (processManager.getActiveProcessCount() > 0) {
+      console.log('🧹 Final cleanup of remaining processes...');
+      processManager.cleanup();
+    }
   } catch (error) {
     console.error('');
     console.error(`❌ Error: ${error.message}`);
+    
+    // 错误时清理进程
+    if (processManager.getActiveProcessCount() > 0) {
+      console.log('🧹 Cleaning up processes due to error...');
+      processManager.cleanup();
+    }
+    
     process.exit(1);
   }
 }
