@@ -3,7 +3,7 @@
 import { readFileSync, writeFileSync, existsSync, unlinkSync, readdirSync, statSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
-import { spawn } from 'child_process';
+import { processManager } from '../../lib/process-manager.mjs';
 
 // ============================================================================
 // Configuration Loading
@@ -337,9 +337,57 @@ export function cleanTgzFiles(dir) {
 }
 
 /**
+ * 获取 package.json 中的实际包名
+ * @param {string} dir - 目录路径
+ * @returns {string} 实际包名
+ */
+export function getActualPackageName(dir) {
+  const packageJsonPath = join(dir, 'package.json');
+  
+  if (!existsSync(packageJsonPath)) {
+    throw new Error(`package.json not found in ${dir}`);
+  }
+
+  try {
+    const content = readFileSync(packageJsonPath, 'utf-8');
+    const packageJson = JSON.parse(content);
+    
+    if (!packageJson.name) {
+      throw new Error('package.json is missing "name" field');
+    }
+
+    return packageJson.name;
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      throw new Error(`Invalid package.json in ${dir}: ${error.message}`);
+    }
+    throw error;
+  }
+}
+
+/**
+ * 将包名转换为 npm pack 使用的文件名前缀
+ * @param {string} packageName - 包名
+ * @returns {string} 文件名前缀
+ */
+export function packageNameToFilenamePrefix(packageName) {
+  // 处理作用域包，如 @uc/modal-agent-orders → uc-modal--agent-orders.react
+  if (packageName.startsWith('@')) {
+    const parts = packageName.slice(1).split('/');
+    if (parts.length === 2) {
+      // 作用域包：@scope/name → scope--name
+      // 注意：实际文件名可能包含 .react 后缀，这由 npm pack 决定
+      return `${parts[0]}--${parts[1]}`;
+    }
+  }
+  
+  return packageName;
+}
+
+/**
  * 查找生成的 .tgz 文件
  * @param {string} dir - 目录路径
- * @param {string} packageName - 包名
+ * @param {string} packageName - 包名（配置中的名称）
  * @param {string} version - 版本号
  * @returns {string} .tgz 文件完整路径
  */
@@ -348,22 +396,73 @@ export function findTgzFile(dir, packageName, version) {
     throw new Error(`Directory not found: ${dir}`);
   }
 
-  // 尝试精确匹配
-  const expectedName = `${packageName}-${version}.tgz`;
+  // 获取 package.json 中的实际包名
+  const actualPackageName = getActualPackageName(dir);
+  const filenamePrefix = packageNameToFilenamePrefix(actualPackageName);
+
+  // 尝试精确匹配（使用实际包名和版本）
+  const expectedName = `${filenamePrefix}-${version}.tgz`;
   const exactPath = join(dir, expectedName);
 
   if (existsSync(exactPath)) {
     return exactPath;
   }
 
-  // 查找最新的 .tgz 文件
-  const files = readdirSync(dir).filter(file => file.endsWith('.tgz') && file.startsWith(`${packageName}-`));
-
-  if (files.length === 0) {
-    throw new Error(`No .tgz file found for ${packageName} in ${dir}`);
+  // 查找所有 .tgz 文件
+  const allTgzFiles = readdirSync(dir).filter(file => file.endsWith('.tgz'));
+  
+  if (allTgzFiles.length === 0) {
+    throw new Error(`No .tgz files found in ${dir}`);
   }
 
-  // 按修改时间排序，返回最新的
+  // 优先匹配包含版本号的文件
+  const versionMatches = allTgzFiles.filter(file => file.includes(version));
+  
+  if (versionMatches.length > 0) {
+    // 在包含版本号的文件中，优先匹配前缀
+    const prefixMatches = versionMatches.filter(file => 
+      file.startsWith(`${filenamePrefix}-`)
+    );
+    
+    if (prefixMatches.length > 0) {
+      // 返回最新的匹配文件
+      return getNewestFile(dir, prefixMatches);
+    }
+    
+    // 如果前缀不匹配，返回包含版本号的最新文件
+    return getNewestFile(dir, versionMatches);
+  }
+
+  // 如果没有版本匹配，尝试前缀匹配
+  const prefixMatches = allTgzFiles.filter(file => 
+    file.startsWith(`${filenamePrefix}-`)
+  );
+  
+  if (prefixMatches.length > 0) {
+    return getNewestFile(dir, prefixMatches);
+  }
+
+  // 最后尝试配置中的包名匹配（向后兼容）
+  const configMatches = allTgzFiles.filter(file => 
+    file.startsWith(`${packageName}-`)
+  );
+  
+  if (configMatches.length > 0) {
+    return getNewestFile(dir, configMatches);
+  }
+
+  // 如果都没有匹配，返回最新的 .tgz 文件
+  console.warn(`⚠️  No exact match found for ${packageName}, returning newest .tgz file`);
+  return getNewestFile(dir, allTgzFiles);
+}
+
+/**
+ * 获取最新的文件
+ * @param {string} dir - 目录路径
+ * @param {string[]} files - 文件列表
+ * @returns {string} 最新文件的完整路径
+ */
+export function getNewestFile(dir, files) {
   const sortedFiles = files.map(file => ({
     name: file,
     path: join(dir, file)
@@ -414,25 +513,14 @@ export async function executeCommand(command, dir, dependencyOutputs) {
   const cmd = parts[0];
   const args = parts.slice(1);
 
-  return new Promise((resolve, reject) => {
-    const proc = spawn(cmd, args, {
+  try {
+    await processManager.executeCommand(cmd, args, {
       cwd: dir,
-      stdio: 'inherit',
       shell: false
     });
-
-    proc.on('close', (code) => {
-      if (code === 0) {
-        resolve();
-      } else {
-        reject(new Error(`Command "${resolvedCommand}" exited with code ${code}`));
-      }
-    });
-
-    proc.on('error', (error) => {
-      reject(new Error(`Failed to execute "${resolvedCommand}": ${error.message}`));
-    });
-  });
+  } catch (error) {
+    throw new Error(`Failed to execute "${resolvedCommand}": ${error.message}`);
+  }
 }
 
 /**
@@ -461,11 +549,8 @@ export async function executePackageItem(item, dependencyOutputs) {
     cleanTgzFiles(dir);
     console.log('     🧹 Cleaned old .tgz files');
 
-    // 3. 如果有依赖项，清除 node_modules 并更新 package.json 依赖路径
+    // 3. 如果有依赖项，更新 package.json 依赖路径
     if (item.depends_on && dependencyOutputs[item.depends_on]) {
-      console.log('     🗑️  Clear node_modules');
-      await executeCommand('rm -rf node_modules', dir, {});
-      
       // 更新 package.json 中的依赖路径为新的 tarball 路径
       const depTgzPath = dependencyOutputs[item.depends_on];
       const depName = item.depends_on.split('/').pop();
@@ -495,7 +580,7 @@ export async function executePackageItem(item, dependencyOutputs) {
 
     // 5. 查找生成的 .tgz 文件
     const tgzPath = findTgzFile(dir, item.name, alphaVersion);
-    console.log(`     ✅ Generated: ${tgzPath}`);
+    console.log(`     ✅ Generated: ${tgzPath.split('/').pop()}`);
 
     return tgzPath;
   } finally {
@@ -523,11 +608,8 @@ export async function executeAppItem(item, dependencyOutputs) {
   console.log(`  🚀 App: ${item.name}`);
 
   try {
-    // 1. 如果有依赖项，清除 node_modules 并更新 package.json 依赖路径
+    // 1. 如果有依赖项，更新 package.json 依赖路径
     if (item.depends_on && dependencyOutputs[item.depends_on]) {
-      console.log('     🗑️  Clear node_modules');
-      await executeCommand('rm -rf node_modules', dir, {});
-
       // 更新 package.json 中的依赖路径为新的 tarball 路径
       const depTgzPath = dependencyOutputs[item.depends_on];
       const depName = item.depends_on.split('/').pop();
@@ -623,7 +705,10 @@ export default {
   generateTimestamp,
   generateAlphaVersion,
   cleanTgzFiles,
+  getActualPackageName,
+  packageNameToFilenamePrefix,
   findTgzFile,
+  getNewestFile,
   replacePlaceholders,
   executeCommand,
   executePackageItem,
