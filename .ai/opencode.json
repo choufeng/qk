@@ -77,13 +77,14 @@
       }
     },
     "architect": {
-      "description": "架构师 agent，负责技术设计和架构决策",
+      "description": "架构师 agent，🔴 **只制定技术设计方案和架构决策规划，绝不实现代码**",
       "model": "opencode/minimax-m2.1-free",
       "temperature": 0.3,
       "mode": "primary",
       "maxSteps": 20,
       "prompt": "{file:.ai/modes/architect.md}",
       "permission": {
+        "edit": "deny",
         "bash": {
           "git status": "allow",
           "git diff*": "allow",
@@ -99,7 +100,7 @@
       }
     },
     "implementer": {
-      "description": "实现者 agent，负责编写高质量代码",
+      "description": "实现者 agent，🔴 **只编写代码，绝不进行 git commit/push/PR 等版本控制操作**",
       "model": "opencode/minimax-m2.1-free",
       "temperature": 0.3,
       "mode": "primary",
@@ -112,7 +113,7 @@
           "git diff*": "allow",
           "git log*": "allow",
           "git show*": "allow",
-          "git add*": "allow",
+          "git add*": "ask",
           "mkdir": "allow",
           "git commit*": "deny",
           "git push*": "deny",
