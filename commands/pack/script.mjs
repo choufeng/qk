@@ -42,9 +42,12 @@ export async function run(args) {
     console.log(`📦 Loaded ${items.length} items`);
     console.log('');
 
+    // 启动会话（创建持久化文件）
+    processManager.startSession(configName);
+
     // 执行链式打包
     await executeChain(items);
-    
+
     // 正常完成时也清理一下
     if (processManager.getActiveProcessCount() > 0) {
       console.log('🧹 Final cleanup of remaining processes...');
@@ -53,15 +56,21 @@ export async function run(args) {
   } catch (error) {
     console.error('');
     console.error(`❌ Error: ${error.message}`);
-    
+
     // 错误时清理进程
     if (processManager.getActiveProcessCount() > 0) {
       console.log('🧹 Cleaning up processes due to error...');
       processManager.cleanup();
     }
-    
+
+    // 结束会话（标记结束时间）
+    processManager.endSession();
+
     process.exit(1);
   }
+
+  // 结束会话（标记结束时间）
+  processManager.endSession();
 }
 
 export default run;
