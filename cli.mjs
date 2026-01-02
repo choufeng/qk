@@ -37,6 +37,7 @@ try {
       .command(dir)
       .argument('[args...]', 'Optional arguments for the command')
       .description(description)
+      .allowUnknownOption()
       .action(async (...args) => {
         const { default: run } = await import(`./commands/${dir}/script.mjs`);
         // Pass all arguments to the command
