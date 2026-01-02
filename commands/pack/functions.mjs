@@ -307,7 +307,17 @@ export function generateTimestamp() {
  */
 export function generateAlphaVersion(baseVersion) {
   const timestamp = generateTimestamp();
-  return `${baseVersion}-alpha.${timestamp}`;
+  
+  // 检查版本号是否已经包含 alpha 标签
+  const alphaRegex = /-alpha\.\d+$/;
+  
+  if (alphaRegex.test(baseVersion)) {
+    // 如果已经包含 alpha 标签，替换时间戳
+    return baseVersion.replace(alphaRegex, `-alpha.${timestamp}`);
+  } else {
+    // 如果不包含 alpha 标签，添加新的 alpha 标签
+    return `${baseVersion}-alpha.${timestamp}`;
+  }
 }
 
 // ============================================================================
@@ -486,15 +496,27 @@ export function getNewestFile(dir, files) {
 /**
  * 替换占位符
  * @param {string} command - 命令
- * @param {Object} dependencyOutputs - 依赖项输出映射
+ * @param {Object} dependencyOutputs - 依赖项输出映射 { name: { tarballPath, packageName } }
  * @returns {string} 替换后的命令
  */
 export function replacePlaceholders(command, dependencyOutputs) {
+  // 检测是否是 pnpm add 命令
+  const isPnpmAdd = /\.?\/?(pnpm)\s+add\s+/.test(command);
+  
   return command.replace(/\{\{([\w-]+)\}\}/g, (match, name) => {
-    if (dependencyOutputs[name]) {
-      return dependencyOutputs[name];
+    const dep = dependencyOutputs[name];
+    if (!dep) {
+      throw new Error(`Unknown dependency: "${name}" in command "${command}"`);
     }
-    throw new Error(`Unknown dependency: "${name}" in command "${command}"`);
+    
+    // 如果是 pnpm add 命令且有包名信息，使用 package@file:path 格式
+    // 这样可以避免 pnpm 检查 lockfile 中的旧路径
+    if (isPnpmAdd && dep.packageName) {
+      return `${dep.packageName}@file:${dep.tarballPath}`;
+    }
+    
+    // 向后兼容：支持旧格式（直接是路径字符串）
+    return dep.tarballPath || dep;
   });
 }
 
@@ -527,7 +549,7 @@ export async function executeCommand(command, dir, dependencyOutputs) {
  * 执行 package 项
  * @param {Object} item - 配置项
  * @param {Object} dependencyOutputs - 依赖项输出映射
- * @returns {Promise<string>} 生成的 .tgz 文件路径
+ * @returns {Promise<{tarballPath: string, packageName: string}>} 生成的 .tgz 文件路径和包名
  */
 export async function executePackageItem(item, dependencyOutputs) {
   const dir = resolvePath(item.dir);
@@ -535,10 +557,14 @@ export async function executePackageItem(item, dependencyOutputs) {
   const originalVersion = readPackageVersion(dir);
   const alphaVersion = generateAlphaVersion(originalVersion);
 
+  // 获取实际包名（从 package.json 中读取）
+  const actualPackageName = getActualPackageName(dir);
+
   // 备份原始 package.json 内容，确保执行后恢复
   const originalPackageJsonContent = readFileSync(packageJsonPath, 'utf-8');
 
   console.log(`  📦 Package: ${item.name}`);
+  console.log(`     Package Name: ${actualPackageName}`);
   console.log(`     Version: ${originalVersion} → ${alphaVersion}`);
 
   // 1. 修改 version
@@ -552,10 +578,11 @@ export async function executePackageItem(item, dependencyOutputs) {
     // 3. 如果有依赖项，更新 package.json 依赖路径
     if (item.depends_on && dependencyOutputs[item.depends_on]) {
       // 更新 package.json 中的依赖路径为新的 tarball 路径
-      const depTgzPath = dependencyOutputs[item.depends_on];
-      const depName = item.depends_on.split('/').pop();
-      console.log(`     📝 Update ${depName} dependency to ${depTgzPath.split('/').pop()}`);
-      updatePackageDependency(dir, depName, `file:${depTgzPath}`);
+      const dep = dependencyOutputs[item.depends_on];
+      const depTgzPath = dep.tarballPath || dep;
+      const depPackageName = dep.packageName || item.depends_on;
+      console.log(`     📝 Update ${depPackageName} dependency to ${depTgzPath.split('/').pop()}`);
+      updatePackageDependency(dir, depPackageName, `file:${depTgzPath}`);
     }
 
     // 4. 执行命令序列（替换 {{package-name}} 占位符）
@@ -582,7 +609,11 @@ export async function executePackageItem(item, dependencyOutputs) {
     const tgzPath = findTgzFile(dir, item.name, alphaVersion);
     console.log(`     ✅ Generated: ${tgzPath.split('/').pop()}`);
 
-    return tgzPath;
+    // 返回包含 tarballPath 和 packageName 的对象
+    return {
+      tarballPath: tgzPath,
+      packageName: actualPackageName
+    };
   } finally {
     // 7. 恢复原始 package.json（包括 version 和 dependencies）
     writeFileSync(packageJsonPath, originalPackageJsonContent);
@@ -593,7 +624,7 @@ export async function executePackageItem(item, dependencyOutputs) {
 /**
  * 执行 app 项
  * @param {Object} item - 配置项
- * @param {Object} dependencyOutputs - 依赖项输出映射
+ * @param {Object} dependencyOutputs - 依赖项输出映射 { name: { tarballPath, packageName } }
  * @returns {Promise<void>}
  */
 export async function executeAppItem(item, dependencyOutputs) {
@@ -611,10 +642,11 @@ export async function executeAppItem(item, dependencyOutputs) {
     // 1. 如果有依赖项，更新 package.json 依赖路径
     if (item.depends_on && dependencyOutputs[item.depends_on]) {
       // 更新 package.json 中的依赖路径为新的 tarball 路径
-      const depTgzPath = dependencyOutputs[item.depends_on];
-      const depName = item.depends_on.split('/').pop();
-      console.log(`     📝 Update ${depName} dependency to ${depTgzPath.split('/').pop()}`);
-      updatePackageDependency(dir, depName, `file:${depTgzPath}`);
+      const dep = dependencyOutputs[item.depends_on];
+      const depTgzPath = dep.tarballPath || dep;
+      const depPackageName = dep.packageName || item.depends_on;
+      console.log(`     📝 Update ${depPackageName} dependency to ${depTgzPath.split('/').pop()}`);
+      updatePackageDependency(dir, depPackageName, `file:${depTgzPath}`);
     }
 
     // 2. 执行命令序列
@@ -672,16 +704,17 @@ export async function executeChain(items) {
   console.log('');
 
   // 依次执行
+  // dependencyOutputs 存储格式: { name: { tarballPath, packageName } }
   const dependencyOutputs = {};
 
   for (const item of sortedItems) {
     console.log(`\n▶️  Executing: ${item.name}`);
 
     try {
-      let tgzPath;
       if (item.type === 'package') {
-        tgzPath = await executePackageItem(item, dependencyOutputs);
-        dependencyOutputs[item.name] = tgzPath;
+        // executePackageItem 返回 { tarballPath, packageName }
+        const result = await executePackageItem(item, dependencyOutputs);
+        dependencyOutputs[item.name] = result;
       } else {
         await executeAppItem(item, dependencyOutputs);
       }
