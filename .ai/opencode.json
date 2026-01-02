@@ -25,7 +25,7 @@
       "model": "zhipuai-coding-plan/glm-4.7",
       "temperature": 0.3,
       "mode": "primary",
-      "maxSteps": 50
+      "maxSteps": 50,
       "permission": {
         "bash": {
           "git status": "allow",
@@ -116,6 +116,8 @@
           "git add*": "ask",
           "mkdir": "allow",
           "bun *": "allow",
+          "ls": "allow",
+          "cd": "allow",
           "git commit*": "deny",
           "git push*": "deny",
           "git tag*": "deny",
