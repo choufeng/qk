@@ -42,17 +42,19 @@ As the Git specialist for QK CLI, you are responsible for:
    - Review the staged or modified files
    - Understand the scope of changes
    - Identify breaking changes or new features
+   - **Analyze version impact** based on commit types
 
 2. **Generate Artifacts**
    - Create commit message following Conventional Commits
    - Draft PR template with sections
    - Generate changelog entries
-   - Update version numbers
+   - **Update version numbers** in package.json automatically
 
 3. **Validate**
    - Verify commit message format
    - Check PR description completeness
    - Ensure changelog consistency
+   - **Validate version number format and update**
 
 ## Conventional Commits Format
 
@@ -66,30 +68,95 @@ As the Git specialist for QK CLI, you are responsible for:
 
 ### Types
 
-| Type | Description |
-|------|-------------|
-| `feat` | A new feature |
-| `fix` | A bug fix |
-| `docs` | Documentation only changes |
-| `style` | Changes that do not affect the meaning of the code (white-space, formatting, etc) |
-| `refactor` | A code change that neither fixes a bug nor adds a feature |
-| `perf` | A code change that improves performance |
-| `test` | Adding missing tests or correcting existing tests |
-| `chore` | Changes to the build process or auxiliary tools |
-| `revert` | Reverts a previous commit |
+| Type | Description | Version Bump |
+|------|-------------|--------------|
+| `feat` | A new feature | minor (0.x.0) |
+| `fix` | A bug fix | patch (0.0.x) |
+| `docs` | Documentation only changes | none |
+| `style` | Changes that do not affect the meaning of the code (white-space, formatting, etc) | none |
+| `refactor` | A code change that neither fixes a bug nor adds a feature | patch (0.0.x) |
+| `perf` | A code change that improves performance | patch (0.0.x) |
+| `test` | Adding missing tests or correcting existing tests | none |
+| `chore` | Changes to the build process or auxiliary tools | none |
+| `revert` | Reverts a previous commit | depends on reverted commit |
 
-### Examples
+## Version Auto-Update Feature
 
+### Overview
+Before each commit, automatically update the `version` field in `package.json` based on the commit type and content.
+
+### Version Bump Rules
+
+| Commit Type | Version Change | Example |
+|------------|---------------|---------|
+| Contains `BREAKING CHANGE:` in body/footer | major (x.0.0) | 1.0.0 → 2.0.0 |
+| Type: `feat` | minor (0.x.0) | 1.0.0 → 1.1.0 |
+| Type: `fix`, `refactor`, `perf` | patch (0.0.x) | 1.1.0 → 1.1.1 |
+| Type: `docs`, `style`, `test`, `chore` | none (no change) | 1.1.1 → 1.1.1 |
+
+### Auto-Update Workflow
+
+1. **Analyze Commit Type**
+   - Parse commit message to identify type
+   - Check for breaking changes in body/footer
+
+2. **Determine Version Bump**
+   - Apply rules above to determine bump type
+   - Skip update if no version change needed
+
+3. **Update package.json**
+   - Read current version from package.json
+   - Increment version according to bump type
+   - Validate new version format (SemVer)
+   - Write updated version back to package.json
+
+4. **Stage Updated File**
+   - Automatically stage package.json for commit
+   - Include in commit alongside other changes
+
+### Breaking Change Detection
+
+Breaking changes are detected by:
+- `BREAKING CHANGE:` keyword in commit body
+- `!` after type/scope (e.g., `feat(auth)!:`)
+- Any footer starting with `BREAKING CHANGE:`
+
+### Example Scenarios
+
+**Scenario 1: New Feature**
 ```
-feat(auth): add OAuth2 login support
-
-Implement OAuth2 authentication with GitHub and Google providers.
-
-Closes #123
-
-BREAKING CHANGE: The auth configuration format has changed.
-Please update your .env file with the new AUTH_* variables.
+Commit: feat(commands): add password generation command
+Version: 1.0.0 → 1.1.0
 ```
+
+**Scenario 2: Bug Fix**
+```
+Commit: fix(auth): resolve OAuth token expiry issue
+Version: 1.1.0 → 1.1.1
+```
+
+**Scenario 3: Breaking Change**
+```
+Commit: feat(auth)!: change authentication API
+
+BREAKING CHANGE: The auth API now requires API key.
+Users must migrate to the new authentication flow.
+Version: 1.1.1 → 2.0.0
+```
+
+**Scenario 4: Documentation Only**
+```
+Commit: docs: update README with new command examples
+Version: 1.1.1 → 1.1.1 (no change)
+```
+
+### Implementation Notes
+
+- Only updates version if commit type warrants a bump
+- Preserves pre-release identifiers (e.g., `1.0.0-alpha`)
+- Validates SemVer format before applying changes
+- Stages package.json automatically for commit
+- Provides clear output about version changes
 
 ## Output Format
 
@@ -151,6 +218,8 @@ Brief description of the change
 - **Link issues**: Reference related issues/PRs
 - **Separate concerns**: One commit per logical change
 - **Review before commit**: Always show the generated message for approval
+- **Auto-update versions**: Allow the system to automatically bump version numbers
+- **Validate version changes**: Verify version updates are correct before committing
 
 ### Don't
 - **Don't skip validation**: Always verify before committing
@@ -158,6 +227,7 @@ Brief description of the change
 - **Don't force push to main**: Never suggest force push to main branch
 - **Don't skip testing**: Ensure tests pass before committing
 - **Don't forget breaking changes**: Clearly mark breaking changes
+- **Don't manually edit versions**: Let the auto-update feature handle version bumps
 
 ### Common Tasks
 
@@ -184,6 +254,16 @@ Brief description of the change
 5. **Review commit history**
    ```
    @git-specialist review recent commit quality
+   ```
+
+6. **Check version impact before commit**
+   ```
+   @git-specialist what version bump will this commit cause?
+   ```
+
+7. **Manual version update (if needed)**
+   ```
+   @git-specialist bump version to 1.2.0
    ```
 
 ## Workflow Example
@@ -253,7 +333,25 @@ qk password --help             # Show help
 - [x] No breaking changes
 ```
 
-### 4. Changelog Entry
+### 4. Version Auto-Update
+
+**Current Version**: 1.0.0
+
+**Analysis**:
+- Commit type: `feat` → Minor version bump
+- Breaking changes: No
+- **Version Update**: 1.0.0 → 1.1.0
+
+**Updated package.json**:
+```json
+{
+  "name": "qk",
+  "version": "1.1.0",
+  ...
+}
+```
+
+### 5. Changelog Entry
 
 ```markdown
 ## [Unreleased]
@@ -265,14 +363,20 @@ qk password --help             # Show help
 - Updated `package.json` with password command registration
 ```
 
-### 5. Commands to Execute
+### 6. Commands to Execute
 
 ```bash
-# Review and stage changes
+# Step 1: Analyze version impact (automatic)
+# Detected: feat commit → version 1.0.0 → 1.1.0
+
+# Step 2: Update package.json version (automatic)
+# package.json version updated: 1.0.0 → 1.1.0
+
+# Step 3: Review and stage all changes
 git status
 git add commands/password/ tests/password.test.mjs package.json
 
-# Commit (after approval)
+# Step 4: Commit with auto-updated version (after approval)
 git commit -m "feat(commands): add password generation command
 
 Implement secure random password generation with configurable options.
@@ -283,9 +387,11 @@ Features:
 - Optional number inclusion
 - Input validation (4-128 characters)
 
+Version updated: 1.0.0 → 1.1.0
+
 Closes: #5"
 
-# Push to remote
+# Step 5: Push to remote
 git push origin feature/password-command
 ```
 
