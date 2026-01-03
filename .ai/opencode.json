@@ -22,7 +22,7 @@
   "agent": {
     "build": {
       "description": "构建 agent，默认主 agent，用于日常开发工作",
-      "model": "zhipuai-coding-plan/glm-4.7",
+      "model": "opencode/minimax-m2.1-free",
       "temperature": 0.3,
       "mode": "primary",
       "maxSteps": 50,
@@ -44,7 +44,7 @@
     },
     "plan": {
       "description": "规划 agent，只读模式，用于分析和审查",
-      "model": "zhipuai-coding-plan/glm-4.7",
+      "model": "opencode/minimax-m2.1-free",
       "temperature": 0.2,
       "mode": "primary",
       "maxSteps": 20,
@@ -55,7 +55,7 @@
     },
     "product-manager": {
       "description": "产品经理 agent，负责需求分析和产品规格定义",
-      "model": "openrouter/qwen/qwen3-coder:free",
+      "model": "opencode/minimax-m2.1-free",
       "temperature": 0.4,
       "mode": "primary",
       "maxSteps": 15,
@@ -115,21 +115,76 @@
           "git show*": "allow",
           "git add*": "ask",
           "mkdir": "allow",
-          "bun *": "allow",
           "ls": "allow",
           "cd": "allow",
+          "cat *": "allow",
+
+          // Bun 包管理命令
+          "bun install": "allow",
+          "bun add": "allow",
+          "bun remove": "allow",
+          "bun outdated": "allow",
+          "bun run": "allow",
+          "bun test": "allow",
+          "bun dev": "allow",
+          "bun start": "allow",
+          "bun build": "allow",
+          "bun fmt": "allow",
+          "bun lint": "allow",
+          "bun --version": "allow",
+
+          // 备用包管理器
+          "pnpm install": "allow",
+          "pnpm add": "allow",
+          "pnpm remove": "allow",
+          "pnpm run": "allow",
+          "pnpm test": "allow",
+          "npm install": "allow",
+          "npm install -D": "allow",
+          "npm run": "allow",
+          "npm test": "allow",
+
+          // 代码质量工具
+          "prettier --write": "allow",
+          "prettier --check": "allow",
+          "eslint --fix": "allow",
+          "eslint --check": "allow",
+
+          // TypeScript 编译
+          "tsc": "allow",
+          "tsc --noEmit": "allow",
+
+          // Node.js 版本查询
+          "node --version": "allow",
+          "npm --version": "allow",
+          "pnpm --version": "allow",
+
+          // 版本控制相关 - deny（保留给 git-specialist）
           "git commit*": "deny",
           "git push*": "deny",
           "git tag*": "deny",
           "git reset*": "deny",
+          "git checkout*": "ask",
+          "git branch*": "allow",
+          "git remote*": "allow",
+
+          // GitHub CLI - deny
           "gh *": "deny",
+
+          // 危险操作 - ask 或 deny
+          "rm *": "ask",
+          "rm -rf *": "deny",
+          "chmod *": "ask",
+          "chown *": "ask",
+
+          // 其他命令默认询问
           "*": "ask"
         }
       }
     },
     "code-reviewer": {
       "description": "代码审查 agent，负责审查代码质量和提出改进建议",
-      "model": "openrouter/google/gemini-3-pro-preview",
+      "model": "opencode/minimax-m2.1-free",
       "temperature": 0.2,
       "mode": "primary",
       "maxSteps": 25,
@@ -152,7 +207,7 @@
     },
     "problem-solver": {
       "description": "问题解决 agent，负责调试问题和提供修复方案",
-      "model": "openrouter/anthropic/claude-sonnet-4.5",
+      "model": "opencode/minimax-m2.1-free",
       "temperature": 0.2,
       "mode": "primary",
       "maxSteps": 30,

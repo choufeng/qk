@@ -39,6 +39,11 @@ export async function loadConfig(configName) {
       throw new Error('Configuration must be an array');
     }
 
+    // 验证 commands 格式
+    if (!Array.isArray(config)) {
+      throw new Error('Configuration must be an array');
+    }
+
     // 验证必需字段
     for (let i = 0; i < config.length; i++) {
       const item = config[i];
@@ -52,6 +57,44 @@ export async function loadConfig(configName) {
       if (errors.length > 0) {
         throw new Error(`Item ${i + 1} is missing required fields: ${errors.join(', ')}`);
       }
+
+      // 验证 commands 数组格式
+      if (!Array.isArray(item.commands)) {
+        throw new Error(`Item "${item.name}": commands must be an array`);
+      }
+
+      // 验证每个命令项
+      item.commands.forEach((cmd, cmdIndex) => {
+        if (typeof cmd === 'string') {
+          // 字符串命令：验证非空
+          if (!cmd || typeof cmd !== 'string' || !cmd.trim()) {
+            throw new Error(
+              `Item "${item.name}" command ${cmdIndex + 1}: cannot be empty`
+            );
+          }
+        } else if (Array.isArray(cmd)) {
+          // 数组命令：验证非空数组
+          if (cmd.length === 0) {
+            throw new Error(
+              `Item "${item.name}" command ${cmdIndex + 1}: parallel array cannot be empty`
+            );
+          }
+          // 验证每个子命令
+          cmd.forEach((subCmd, subIndex) => {
+            if (!subCmd || typeof subCmd !== 'string' || !subCmd.trim()) {
+              throw new Error(
+                `Item "${item.name}" command ${cmdIndex + 1}[${subIndex}]: ` +
+                `must be a non-empty string`
+              );
+            }
+          });
+        } else {
+          throw new Error(
+            `Item "${item.name}" command ${cmdIndex + 1}: ` +
+            `must be string or array of strings`
+          );
+        }
+      });
 
       if (!['package', 'app'].includes(item.type)) {
         throw new Error(`Item "${item.name}" has invalid type: "${item.type}" (must be "package" or "app")`);
@@ -546,6 +589,79 @@ export async function executeCommand(command, dir, dependencyOutputs) {
 }
 
 /**
+ * 执行命令序列（支持串行和并行）
+ * @param {Array} commands - 命令数组（字符串或字符串数组）
+ * @param {string} dir - 执行目录
+ * @param {Object} dependencyOutputs - 依赖项输出映射
+ */
+export async function executeCommands(commands, dir, dependencyOutputs) {
+  const resolvedDir = resolvePath(dir);
+
+  for (let i = 0; i < commands.length; i++) {
+    const commandItem = commands[i];
+
+    // === 并发执行（数组） ===
+    if (Array.isArray(commandItem)) {
+      console.log(`\n🚀 Parallel execution (${commandItem.length} commands)`);
+
+      const parallelCommands = commandItem.map(cmd => {
+        // 替换占位符
+        let resolvedCmd = replacePlaceholders(cmd, dependencyOutputs);
+
+        // pnpm install 特殊处理
+        if (resolvedCmd.startsWith('pnpm install')) {
+          if (resolvedCmd.includes('.tgz')) {
+            resolvedCmd = resolvedCmd.replace(/^(pnpm install)/, '$1 --force');
+          }
+          resolvedCmd += ' --ignore-workspace';
+        }
+
+        return resolvedCmd;
+      });
+
+      try {
+        const result = await processManager.executeCommandsParallel(parallelCommands, {
+          cwd: resolvedDir,
+          killOnFail: true
+        });
+
+        if (!result.success) {
+          throw new Error(
+            `${result.failedCount} parallel commands failed: ${result.failedCommands?.join(', ')}`
+          );
+        }
+
+      } catch (error) {
+        console.error(`\n❌ Parallel execution failed: ${error.message}`);
+        throw error;
+      }
+
+    // === 串行执行（字符串） ===
+    } else if (typeof commandItem === 'string') {
+      let modifiedCommand = commandItem;
+
+      // 替换占位符
+      modifiedCommand = replacePlaceholders(modifiedCommand, dependencyOutputs);
+
+      // pnpm install 特殊处理
+      if (modifiedCommand.startsWith('pnpm install')) {
+        if (modifiedCommand.includes('.tgz')) {
+          modifiedCommand = modifiedCommand.replace(/^(pnpm install)/, '$1 --force');
+        }
+        modifiedCommand += ' --ignore-workspace';
+      }
+
+      console.log(`     ⚡ Execute: ${modifiedCommand}`);
+      await executeCommand(modifiedCommand, dir, dependencyOutputs);
+
+    // === 错误处理 ===
+    } else {
+      throw new Error(`Invalid command type at index ${i}: ${typeof commandItem}`);
+    }
+  }
+}
+
+/**
  * 执行 package 项
  * @param {Object} item - 配置项
  * @param {Object} dependencyOutputs - 依赖项输出映射
@@ -585,24 +701,9 @@ export async function executePackageItem(item, dependencyOutputs) {
       updatePackageDependency(dir, depPackageName, `file:${depTgzPath}`);
     }
 
-    // 4. 执行命令序列（替换 {{package-name}} 占位符）
+    // 4. 执行命令序列（支持串行和并行）
     if (item.commands && item.commands.length > 0) {
-      for (const command of item.commands) {
-        let modifiedCommand = command;
-        
-        // 如果命令是 pnpm install
-        if (command.startsWith('pnpm install')) {
-          // 如果包含 tarball 路径，添加 --force
-          if (command.includes('.tgz')) {
-            modifiedCommand = modifiedCommand.replace(/^(pnpm install)/, '$1 --force');
-          }
-          // 添加 --ignore-workspace 以避免 workspace 依赖解析错误
-          modifiedCommand += ' --ignore-workspace';
-        }
-        
-        console.log(`     ⚡ Execute: ${modifiedCommand}`);
-        await executeCommand(modifiedCommand, dir, dependencyOutputs);
-      }
+      await executeCommands(item.commands, dir, dependencyOutputs);
     }
 
     // 5. 查找生成的 .tgz 文件
@@ -649,24 +750,9 @@ export async function executeAppItem(item, dependencyOutputs) {
       updatePackageDependency(dir, depPackageName, `file:${depTgzPath}`);
     }
 
-    // 2. 执行命令序列
+    // 2. 执行命令序列（支持串行和并行）
     if (item.commands && item.commands.length > 0) {
-      for (const command of item.commands) {
-        let modifiedCommand = command;
-
-        // 如果命令是 pnpm install
-        if (command.startsWith('pnpm install')) {
-          // 如果包含 tarball 路径，添加 --force
-          if (command.includes('.tgz')) {
-            modifiedCommand = modifiedCommand.replace(/^(pnpm install)/, '$1 --force');
-          }
-          // 添加 --ignore-workspace 以避免 workspace 依赖解析错误
-          modifiedCommand += ' --ignore-workspace';
-        }
-
-        console.log(`     ⚡ Execute: ${modifiedCommand}`);
-        await executeCommand(modifiedCommand, dir, dependencyOutputs);
-      }
+      await executeCommands(item.commands, dir, dependencyOutputs);
     }
   } finally {
     // 3. 恢复原始 package.json
@@ -744,6 +830,7 @@ export default {
   getNewestFile,
   replacePlaceholders,
   executeCommand,
+  executeCommands,
   executePackageItem,
   executeAppItem,
   executeChain
