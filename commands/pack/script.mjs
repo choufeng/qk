@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { loadConfig, executeChain } from './functions.mjs';
+import { loadConfig, executeChain, listConfigs } from './functions.mjs';
 import { processManager } from '../../lib/process-manager.mjs';
 
 /**
@@ -22,15 +22,26 @@ export async function run(args) {
   if (validArgs.length === 0) {
     console.error('❌ Please provide a configuration name');
     console.log('');
-    console.log('Usage: qk pack <config-name>');
+    console.log('Usage: qk pack <config-name> | list');
     console.log('');
     console.log('Examples:');
+    console.log('  qk pack list       # List available configurations');
     console.log('  qk pack example    # Use ~/.config/qk/pack-example.json');
     console.log('  qk pack my-config  # Use ~/.config/qk/pack-my-config.json');
     process.exit(1);
   }
 
   const configName = validArgs[0];
+
+  if (configName === 'list') {
+    const configs = listConfigs();
+    if (configs.length === 0) {
+      console.log('No pack configurations found in ~/.config/qk/');
+    } else {
+      console.table(configs);
+    }
+    return;
+  }
 
   console.log('🚀 Starting pack chain execution');
   console.log(`📄 Configuration: pack-${configName}.json`);

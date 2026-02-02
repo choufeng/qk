@@ -25,6 +25,14 @@ try {
 
   for (const dir of commandDirs) {
     const scriptPath = join(commandsDir, dir, 'script.mjs');
+    
+    // Skip if script.mjs does not exist
+    try {
+      if (!statSync(scriptPath).isFile()) continue;
+    } catch (e) {
+      continue;
+    }
+
     const scriptContent = readFileSync(scriptPath, 'utf-8');
     
     // Extract @description from JSDoc comments
