@@ -1,1 +1,42 @@
-${n name: qk,n version: 1.6.0,n description: QK CLI - A powerful command-line tool built with ZX and Commander.js,n type: module,n main: cli.mjs,n bin: {n qk: ./cli.mjsn },n scripts: {n start: bun cli.mjs,n test: echo \Error: no test specified\ && exit 1n },n keywords: [n cli,n command-line,n zx,n commander,n tooln ],n author: choufeng,n license: MIT,n dependencies: {n @langchain/core: ^1.1.8,n commander: ^12.1.0,n zx: ^8.8.5n },n devDependencies: {n @types/node: ^22.10.2n },n engines: {n bun: >=1.0.0n },n repository: {n type: git,n url: git+https://github.com/choufeng/qk.gitn },n homepage: https://github.com/choufeng/qk#readme,n bugs: {n url: https://github.com/choufeng/qk/issuesn }n}
+{
+  "name": "qk",
+  "version": "1.6.0",
+  "description": "QK CLI - A powerful command-line tool built with ZX and Commander.js",
+  "type": "module",
+  "main": "cli.mjs",
+  "bin": {
+    "qk": "./cli.mjs"
+  },
+  "scripts": {
+    "start": "bun cli.mjs",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "cli",
+    "command-line",
+    "zx",
+    "commander",
+    "tool"
+  ],
+  "author": "choufeng",
+  "license": "MIT",
+  "dependencies": {
+    "@langchain/core": "^1.1.8",
+    "commander": "^12.1.0",
+    "zx": "^8.8.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2"
+  },
+  "engines": {
+    "bun": ">=1.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/choufeng/qk.git"
+  },
+  "homepage": "https://github.com/choufeng/qk#readme",
+  "bugs": {
+    "url": "https://github.com/choufeng/qk/issues"
+  }
+}
