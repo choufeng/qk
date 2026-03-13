@@ -111,44 +111,6 @@ export async function loadConfig(configName) {
 }
 
 /**
- * 列出所有可用的 pack 配置
- * @returns {Array<{name: string, firstPackage: string, app: string}>} 配置列表
- */
-export function listConfigs() {
-  const configDir = join(homedir(), '.config', 'qk');
-  
-  if (!existsSync(configDir)) {
-    return [];
-  }
-
-  const files = readdirSync(configDir).filter(file => 
-    file.startsWith('pack-') && file.endsWith('.json')
-  );
-
-  return files.map(file => {
-    const name = file.replace(/^pack-/, '').replace(/\.json$/, '');
-    const filePath = join(configDir, file);
-    
-    try {
-      const content = readFileSync(filePath, 'utf-8');
-      const config = JSON.parse(content);
-      
-      if (!Array.isArray(config) || config.length === 0) {
-        return { name, firstPackage: '-', app: '-' };
-      }
-
-      const firstPackage = config[0].name || '-';
-      const appItem = config.find(item => item.type === 'app');
-      const app = appItem ? appItem.name : '-';
-
-      return { name, firstPackage, app };
-    } catch (error) {
-      return { name, firstPackage: 'Error', app: 'Error' };
-    }
-  });
-}
-
-/**
  * 展开路径中的环境变量
  * @param {string} path - 路径
  * @returns {string} 展开后的路径
@@ -851,9 +813,32 @@ export async function executeChain(items) {
   console.log('\n✅ Chain execution completed successfully!');
 }
 
+/**
+ * 获取可用的配置名称列表
+ * @returns {Promise<string[]>} 配置名称数组
+ */
+export async function getAvailableConfigs() {
+  const configDir = join(homedir(), '.config', 'qk');
+
+  if (!existsSync(configDir)) {
+    return [];
+  }
+
+  try {
+    const files = readdirSync(configDir);
+    const configs = files
+      .filter(file => file.startsWith('pack-') && file.endsWith('.json'))
+      .map(file => file.replace(/^pack-/, '').replace(/\.json$/, ''));
+
+    return configs;
+  } catch (error) {
+    console.error(`Failed to read config directory: ${error.message}`);
+    return [];
+  }
+}
+
 export default {
   loadConfig,
-  listConfigs,
   resolvePath,
   validateDependencies,
   buildDependencyGraph,
@@ -872,5 +857,6 @@ export default {
   executeCommands,
   executePackageItem,
   executeAppItem,
-  executeChain
+  executeChain,
+  getAvailableConfigs
 };
