@@ -23,6 +23,7 @@
   "dependencies": {
     "@inquirer/prompts": "^8.3.0",
     "@langchain/core": "^1.1.32",
+    "@langchain/google-vertexai": "^2.1.25",
     "@langchain/ollama": "^1.2.6",
     "commander": "^12.1.0",
     "js-yaml": "^4.1.1",
