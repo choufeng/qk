@@ -16,6 +16,7 @@ import {
   pushBranch,
   hasGhCli,
   hasRemoteTracking,
+  remoteBranchExists,
 } from '../../lib/git/index.mjs'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
@@ -184,26 +185,20 @@ export async function run(args) {
     }
 
     // 14. Push branch if needed
-    // First check if remote branch exists, not just local upstream config
-    let remoteBranchExists = await hasRemoteTracking()
-    if (remoteBranchExists) {
-      // Verify remote branch actually exists
-      try {
-        await $`git ls-remote --heads origin ${currentBranch}`
-      } catch {
-        remoteBranchExists = false
-      }
+    // Check remote branch existence using a reliable method
+    let shouldPush = !(await remoteBranchExists(currentBranch))
+    if (!shouldPush) {
+      console.log('Branch already exists on remote, ensuring up-to-date...')
+    } else {
+      console.log('Pushing branch to remote...')
     }
-    
-    if (!remoteBranchExists) {
-      console.log('Branch not found on remote. Pushing branch...')
-      const pushed = await pushBranch()
-      if (!pushed) {
-        console.error('Failed to push branch.')
-        process.exit(1)
-      }
-      console.log('Branch pushed.')
+
+    const pushed = await pushBranch()
+    if (!pushed) {
+      console.error('Failed to push branch.')
+      process.exit(1)
     }
+    console.log(shouldPush ? 'Branch pushed.' : 'Branch updated.')
 
     // 15. Create PR
     console.log('Creating Pull Request...')
