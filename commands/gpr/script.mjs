@@ -184,8 +184,19 @@ export async function run(args) {
     }
 
     // 14. Push branch if needed
-    if (!(await hasRemoteTracking())) {
-      console.log('Pushing branch to remote...')
+    // First check if remote branch exists, not just local upstream config
+    let remoteBranchExists = await hasRemoteTracking()
+    if (remoteBranchExists) {
+      // Verify remote branch actually exists
+      try {
+        await $`git ls-remote --heads origin ${currentBranch}`
+      } catch {
+        remoteBranchExists = false
+      }
+    }
+    
+    if (!remoteBranchExists) {
+      console.log('Branch not found on remote. Pushing branch...')
       const pushed = await pushBranch()
       if (!pushed) {
         console.error('Failed to push branch.')
@@ -196,7 +207,7 @@ export async function run(args) {
 
     // 15. Create PR
     console.log('Creating Pull Request...')
-    const result = await $`gh pr create --title ${prContent.title} --body ${prContent.description}`
+    const result = await $`gh pr create --title ${prContent.title} --body ${prContent.description} --head ${currentBranch}`
     console.log('Pull Request created!')
     console.log(`PR URL: ${result.stdout.trim()}`)
 
