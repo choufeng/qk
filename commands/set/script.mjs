@@ -25,7 +25,19 @@ export async function run(args) {
 
     config.set('ai.provider', provider)
 
-    // Step 2: Provider-specific config
+    // Step 2: Choose response language
+    const language = await select({
+      message: 'Response language',
+      choices: [
+        { name: 'English', value: 'en' },
+        { name: '简体中文', value: 'zh-CN' },
+        { name: '繁體中文', value: 'zh-TW' },
+      ],
+      default: config.get('ai.language') || 'en',
+    })
+    config.set('ai.language', language)
+
+    // Step 3: Provider-specific config
     if (provider === 'ollama') {
       const endpoint = await input({
         message: 'Ollama endpoint',
@@ -47,10 +59,11 @@ export async function run(args) {
       console.log('  (GOOGLE_CLOUD_PROJECT, GOOGLE_CLOUD_LOCATION)\n')
     }
 
-    // Step 3: Summary and confirm
+    // Step 4: Summary and confirm
     const ai = config.get('ai')
     console.log('\nConfiguration summary:')
     console.log(`  provider: ${ai.provider}`)
+    console.log(`  language: ${ai.language}`)
     if (ai.provider === 'ollama') {
       console.log(`  endpoint: ${ai.ollama.endpoint}`)
       console.log(`  model:    ${ai.ollama.model}`)
