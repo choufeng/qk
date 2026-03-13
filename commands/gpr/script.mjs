@@ -200,11 +200,20 @@ export async function run(args) {
     }
     console.log(shouldPush ? 'Branch pushed.' : 'Branch updated.')
 
-    // 15. Create PR
+    // 15. Create PR (check if one already exists first)
     console.log('Creating Pull Request...')
-    const result = await $`gh pr create --title ${prContent.title} --body ${prContent.description} --head ${currentBranch}`
-    console.log('Pull Request created!')
-    console.log(`PR URL: ${result.stdout.trim()}`)
+    let prUrl
+    try {
+      const existing = await $`gh pr view ${currentBranch} --json url --jq .url`
+      prUrl = existing.stdout.trim()
+      console.log('Pull Request already exists, updated with latest push.')
+    } catch {
+      // No existing PR, create a new one
+      const result = await $`gh pr create --title ${prContent.title} --body ${prContent.description} --head ${currentBranch}`
+      prUrl = result.stdout.trim()
+      console.log('Pull Request created!')
+    }
+    console.log(`PR URL: ${prUrl}`)
 
   } catch (error) {
     if (error.name === 'ExitPromptError') {
