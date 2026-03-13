@@ -3,7 +3,6 @@
   "username": "QK Developer",
   "model": "opencode/big-pickle",
   "default_agent": "build",
-  "theme": "catppuccin-mocha",
   "logLevel": "INFO",
   "tools": {
     "bash": true,
