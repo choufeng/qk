@@ -59,7 +59,7 @@ export async function run(args) {
 
       const selected = await checkbox({
         message: 'Choose files to stage:',
-        choices: modifiedFiles.map(file => ({ name: file, value: file })),
+        choices: modifiedFiles.map(({ absolute, display }) => ({ name: display, value: absolute })),
       })
 
       if (!selected || selected.length === 0) {
@@ -67,7 +67,7 @@ export async function run(args) {
         process.exit(0)
       }
 
-      // Add selected files
+      // Add selected files using absolute paths to avoid cwd-relative path issues
       const filesToAdd = Array.isArray(selected) ? selected : [selected]
       await $`git add ${filesToAdd}`
       console.log(`\nStaged ${filesToAdd.length} file(s).\n`)
