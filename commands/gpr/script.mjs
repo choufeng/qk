@@ -185,28 +185,24 @@ export async function run(args) {
     }
 
     // 14. Push branch if needed
-    // Use remoteBranchExists instead of hasRemoteTracking for more reliable check
-    if (!(await remoteBranchExists(currentBranch))) {
-      console.log('Pushing branch to remote...')
-      const pushed = await pushBranch()
-      if (!pushed) {
-        console.error('Failed to push branch.')
-        process.exit(1)
-      }
-      console.log('Branch pushed.')
-    } else {
+    // Check remote branch existence using a reliable method
+    let shouldPush = !(await remoteBranchExists(currentBranch))
+    if (!shouldPush) {
       console.log('Branch already exists on remote, ensuring up-to-date...')
-      const pushed = await pushBranch()
-      if (!pushed) {
-        console.error('Failed to push branch.')
-        process.exit(1)
-      }
-      console.log('Branch updated.')
+    } else {
+      console.log('Pushing branch to remote...')
     }
+
+    const pushed = await pushBranch()
+    if (!pushed) {
+      console.error('Failed to push branch.')
+      process.exit(1)
+    }
+    console.log(shouldPush ? 'Branch pushed.' : 'Branch updated.')
 
     // 15. Create PR
     console.log('Creating Pull Request...')
-    const result = await $`gh pr create --title ${prContent.title} --body ${prContent.description}`
+    const result = await $`gh pr create --title ${prContent.title} --body ${prContent.description} --head ${currentBranch}`
     console.log('Pull Request created!')
     console.log(`PR URL: ${result.stdout.trim()}`)
 
