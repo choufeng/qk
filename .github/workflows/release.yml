@@ -121,7 +121,7 @@ jobs:
           
           # Normalize versions for comparison
           PKG_NORMALIZED="v$PKG_VERSION"
-          TAG_NORMALIZED="$TAG_VERSION"
+          TAG_NORMALIZED="v$TAG_VERSION"
           
           if [ "$PKG_NORMALIZED" != "$TAG_NORMALIZED" ]; then
             echo "❌ Version mismatch: package.json ($PKG_NORMALIZED) != tag ($TAG_NORMALIZED)"
