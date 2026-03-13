@@ -3,10 +3,10 @@
 import { readFileSync, writeFileSync, unlinkSync } from 'fs'
 import { spawnSync } from 'child_process'
 import { $ } from 'zx'
-import { confirm } from '@inquirer/prompts'
+import { confirm, checkbox } from '@inquirer/prompts'
 import { launch } from '../../lib/ai/index.mjs'
 import { ConfigManager } from '../../lib/config/index.mjs'
-import { hasStagedChanges, getStagedDiff } from '../../lib/git/index.mjs'
+import { hasStagedChanges, getStagedDiff, getModifiedFiles } from '../../lib/git/index.mjs'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 
@@ -47,8 +47,30 @@ export async function run(args) {
     // 1. Check staged changes
     const hasChanges = await hasStagedChanges()
     if (!hasChanges) {
-      console.log('No staged changes found. Run git add first.')
-      process.exit(0)
+      // No staged changes, offer to select from modified files
+      const modifiedFiles = await getModifiedFiles()
+      
+      if (modifiedFiles.length === 0) {
+        console.log('No staged changes and no modified files found.')
+        process.exit(0)
+      }
+
+      console.log('\nNo staged changes found. Select files to add:\n')
+
+      const selected = await checkbox({
+        message: 'Choose files to stage:',
+        choices: modifiedFiles.map(file => ({ name: file, value: file })),
+      })
+
+      if (!selected || selected.length === 0) {
+        console.log('No files selected, cancelled.')
+        process.exit(0)
+      }
+
+      // Add selected files
+      const filesToAdd = Array.isArray(selected) ? selected : [selected]
+      await $`git add ${filesToAdd}`
+      console.log(`\nStaged ${filesToAdd.length} file(s).\n`)
     }
 
     // 2. Load prompt template
