@@ -24,6 +24,7 @@
     "@inquirer/prompts": "^8.3.0",
     "@langchain/core": "^1.1.8",
     "commander": "^12.1.0",
+    "js-yaml": "^4.1.1",
     "zx": "^8.8.5"
   },
   "devDependencies": {
