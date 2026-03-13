@@ -1,11 +1,18 @@
 name: Release
 
-# Trigger on push to main branch (including merged code)
+# Trigger on pull request merged to main branch
 on:
-  push:
+  pull_request:
     branches:
       - main
       - master
+    types:
+      - closed
+
+# Prevent concurrent workflows
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 # Environment variables
 env:
@@ -38,6 +45,7 @@ jobs:
           
           # Check if tag already exists
           TAG="v$VERSION"
+          echo "Checking for tag: $TAG"
           if git rev-parse "refs/tags/$TAG" > /dev/null 2>&1; then
             echo "new_tag_created=false" >> $GITHUB_OUTPUT
             echo "Tag $TAG already exists, skipping tag creation"
@@ -49,18 +57,20 @@ jobs:
       - name: Create tag if needed
         if: steps.version.outputs.new_tag_created == 'true'
         run: |
+          VERSION=$(node -e "console.log(JSON.parse(require('fs').readFileSync('package.json', 'utf8')).version)")
           TAG="v$VERSION"
           echo "Creating tag $TAG..."
           git config user.name "GitHub Actions"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git tag $TAG
           git push origin $TAG
-          echo "Tag $TAG created successfully"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   build-and-test:
     name: Build and Test
     needs: version-check
     runs-on: ubuntu-latest
-    if: needs.version-check.outputs.new_tag_created == 'true'
+    if: github.event.pull_request.merged == true && needs.version-check.outputs.new_tag_created == 'true'
     
     steps:
       - name: Checkout code
@@ -105,8 +115,8 @@ jobs:
           PKG_VERSION=$(node -e "console.log(JSON.parse(require('fs').readFileSync('package.json', 'utf8')).version)")
           echo "Package version: $PKG_VERSION"
           
-          # Get tag version
-          TAG_VERSION=${GITHUB_REF#refs/tags/}
+          # Get version from version-check job
+          TAG_VERSION="${{ needs.version-check.outputs.version }}"
           echo "Tag version: $TAG_VERSION"
           
           # Normalize versions for comparison
@@ -125,7 +135,7 @@ jobs:
     name: Create GitHub Release
     needs: [version-check, build-and-test]
     runs-on: ubuntu-latest
-    if: needs.version-check.outputs.new_tag_created == 'true'
+    if: github.event.pull_request.merged == true && needs.version-check.outputs.new_tag_created == 'true'
     
     steps:
       - name: Checkout code
