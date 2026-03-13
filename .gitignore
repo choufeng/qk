@@ -1,6 +1,9 @@
 # Dependencies
 node_modules/
 
+opencode.json.tui-migration.bak
+tui.json
+
 # Lock files (可选，根据团队习惯）
 # bun.lock
 # package-lock.json
