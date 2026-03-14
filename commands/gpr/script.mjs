@@ -3,6 +3,7 @@
 import { readFileSync, writeFileSync, unlinkSync } from 'fs'
 import { spawnSync } from 'child_process'
 import { $ } from 'zx'
+import chalk from 'chalk'
 import { confirm } from '@inquirer/prompts'
 import { launch } from '../../lib/ai/index.mjs'
 import { ConfigManager } from '../../lib/config/index.mjs'
@@ -77,12 +78,12 @@ export async function run(args) {
     }
 
     // 3. Get branch data
-    console.log(`Analyzing branch '${currentBranch}'...`)
+    console.log(chalk.cyan(`Analyzing branch '${currentBranch}'...`))
     const commits = await getBranchCommits()
     const diff = await getBranchDiff()
 
     if (commits.length === 0 && !diff.trim()) {
-      console.log('No changes found vs main branch. Nothing to PR.')
+      console.log(chalk.yellow('No changes found vs main branch. Nothing to PR.'))
       process.exit(0)
     }
 
@@ -124,17 +125,17 @@ export async function run(args) {
     // 9. Push branch first (needed to check if PR exists)
     let shouldPush = !(await remoteBranchExists(currentBranch))
     if (!shouldPush) {
-      console.log('Branch already exists on remote, ensuring up-to-date...')
+      console.log(chalk.yellow('Branch already exists on remote, ensuring up-to-date...'))
     } else {
-      console.log('Pushing branch to remote...')
+      console.log(chalk.cyan('Pushing branch to remote...'))
     }
 
     const pushed = await pushBranch()
     if (!pushed) {
-      console.error('Failed to push branch.')
+      console.error(chalk.red('Failed to push branch.'))
       process.exit(1)
     }
-    console.log(shouldPush ? 'Branch pushed.' : 'Branch updated.')
+    console.log(shouldPush ? chalk.green('Branch pushed.') : chalk.green('Branch updated.'))
 
     // 10. Check if PR already exists
     let prUrl = null
@@ -150,7 +151,7 @@ export async function run(args) {
     // 11. If PR exists, skip AI generation and just update the PR
     let prContent
     if (prExists) {
-      console.log('Pull Request already exists, updating with latest push.')
+      console.log(chalk.yellow('Pull Request already exists, updating with latest push.'))
       // Get existing PR info to reuse title and description
       try {
         const prInfo = await $`gh pr view ${currentBranch} --json title,body --jq '.title, .body'`
@@ -164,7 +165,7 @@ export async function run(args) {
       }
     } else {
       // 12. Call AI with spinner (only for new PR)
-      const spinner = startSpinner(`Generating PR content via ${provider}...`)
+      const spinner = startSpinner(chalk.cyan(`Generating PR content via ${provider}...`))
       let response
       try {
         response = await launch(prompt, { temperature: 0.3 })
@@ -202,22 +203,23 @@ export async function run(args) {
     }
 
     // 11. Preview
-    console.log('\n' + '='.repeat(50))
-    console.log('PR Preview:')
-    console.log('='.repeat(50))
-    console.log(`Title: ${prContent.title}`)
-    console.log(`\nDescription:\n${prContent.description}`)
-    console.log('='.repeat(50))
+    console.log('\n' + chalk.gray('─').repeat(50))
+    console.log(chalk.bold.cyan('📋 PR Preview:'))
+    console.log(chalk.gray('─').repeat(50))
+    console.log(chalk.bold('Title:') + ' ' + chalk.green(prContent.title))
+    console.log(chalk.bold('\nDescription:'))
+    console.log(chalk.white(prContent.description))
+    console.log(chalk.gray('─').repeat(50))
 
     if (dryRun) {
-      console.log('\n--dry-run: preview only, no PR created.')
+      console.log(chalk.yellow('\n--dry-run: preview only, no PR created.'))
       process.exit(0)
     }
 
     // 12. Check gh CLI
     if (!(await hasGhCli())) {
-      console.log('\nGitHub CLI (gh) not found. Install from https://cli.github.com/')
-      console.log(`Branch: ${currentBranch} → ${mainBranch}`)
+      console.log(chalk.red('\nGitHub CLI (gh) not found. Install from https://cli.github.com/'))
+      console.log(chalk.gray(`Branch: ${currentBranch} → ${mainBranch}`))
       process.exit(0)
     }
 
@@ -225,7 +227,7 @@ export async function run(args) {
     if (autoPR !== true && !prExists) {
       const ok = await confirm({ message: 'Create Pull Request?', default: true })
       if (!ok) {
-        console.log('Cancelled.')
+        console.log(chalk.yellow('Cancelled.'))
         process.exit(0)
       }
     }
@@ -233,24 +235,24 @@ export async function run(args) {
     // 14. Create or update PR
     if (prExists) {
       // Update existing PR with new content
-      console.log('Updating existing Pull Request...')
+      console.log(chalk.cyan('Updating existing Pull Request...'))
       await $`gh pr edit ${currentBranch} --title ${prContent.title} --body ${prContent.description}`
-      console.log('Pull Request updated!')
+      console.log(chalk.green('✓ Pull Request updated!'))
     } else {
       // Create new PR
-      console.log('Creating Pull Request...')
+      console.log(chalk.cyan('Creating Pull Request...'))
       const result = await $`gh pr create --title ${prContent.title} --body ${prContent.description} --head ${currentBranch}`
       prUrl = result.stdout.trim()
-      console.log('Pull Request created!')
+      console.log(chalk.green('✓ Pull Request created!'))
     }
-    console.log(`PR URL: ${prUrl}`)
+    console.log(chalk.bold.blue(`🔗 PR URL: ${prUrl}`))
 
   } catch (error) {
     if (error.name === 'ExitPromptError') {
-      console.log('\nCancelled.')
+      console.log(chalk.yellow('\nCancelled.'))
       process.exit(0)
     }
-    console.error(`Error: ${error.message}`)
+    console.error(chalk.red(`Error: ${error.message}`))
     process.exit(1)
   }
 }
