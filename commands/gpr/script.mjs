@@ -120,21 +120,61 @@ export async function run(args) {
       .replace(/\{\{DIFF\}\}/g, diff || 'No diff available')
       .replace(/\{\{QA_SECTION\}\}/g, qaSection)
 
-    // 9. Call AI with spinner
-    const spinner = startSpinner(`Generating PR content via ${provider}...`)
-    let response
-    try {
-      response = await launch(prompt, { temperature: 0.3 })
-    } finally {
-      stopSpinner(spinner)
+    // 9. Push branch first (needed to check if PR exists)
+    let shouldPush = !(await remoteBranchExists(currentBranch))
+    if (!shouldPush) {
+      console.log('Branch already exists on remote, ensuring up-to-date...')
+    } else {
+      console.log('Pushing branch to remote...')
     }
-    let prContent = parsePrContent(response.content)
 
-    // 10. Check autoPR config
-    const autoPR = config.get('git.autoPR')
+    const pushed = await pushBranch()
+    if (!pushed) {
+      console.error('Failed to push branch.')
+      process.exit(1)
+    }
+    console.log(shouldPush ? 'Branch pushed.' : 'Branch updated.')
 
-    // 10.1 Open editor (unless --no-edit, --dry-run, or autoPR)
-    if (!noEdit && !dryRun && autoPR !== true) {
+    // 10. Check if PR already exists
+    let prUrl = null
+    let prExists = false
+    try {
+      const existing = await $`gh pr view ${currentBranch} --json url --jq .url`
+      prUrl = existing.stdout.trim()
+      prExists = true
+    } catch {
+      // No existing PR
+    }
+
+    // 11. If PR exists, skip AI generation and just update the PR
+    let prContent
+    if (prExists) {
+      console.log('Pull Request already exists, updating with latest push.')
+      // Get existing PR info to reuse title and description
+      try {
+        const prInfo = await $`gh pr view ${currentBranch} --json title,body --jq '.title, .body'`
+        const [title, ...bodyLines] = prInfo.stdout.trim().split('\n')
+        prContent = {
+          title: title.trim(),
+          description: bodyLines.join('\n').trim()
+        }
+      } catch {
+        prContent = { title: 'Update: codebase changes', description: '' }
+      }
+    } else {
+      // 12. Call AI with spinner (only for new PR)
+      const spinner = startSpinner(`Generating PR content via ${provider}...`)
+      let response
+      try {
+        response = await launch(prompt, { temperature: 0.3 })
+      } finally {
+        stopSpinner(spinner)
+      }
+      prContent = parsePrContent(response.content)
+    }
+
+    // 12.1 Open editor (unless --no-edit, --dry-run, autoPR, or PR already exists)
+    if (!noEdit && !dryRun && autoPR !== true && !prExists) {
       const tmpFile = `/tmp/qk-pr-${Date.now()}.md`
       const editorContent = [
         '# PR Title',
@@ -180,8 +220,8 @@ export async function run(args) {
       process.exit(0)
     }
 
-    // 13. Confirm (skip if autoPR is true)
-    if (autoPR !== true) {
+    // 13. Confirm (skip if autoPR is true or PR already exists)
+    if (autoPR !== true && !prExists) {
       const ok = await confirm({ message: 'Create Pull Request?', default: true })
       if (!ok) {
         console.log('Cancelled.')
@@ -189,31 +229,15 @@ export async function run(args) {
       }
     }
 
-    // 14. Push branch if needed
-    // Check remote branch existence using a reliable method
-    let shouldPush = !(await remoteBranchExists(currentBranch))
-    if (!shouldPush) {
-      console.log('Branch already exists on remote, ensuring up-to-date...')
+    // 14. Create or update PR
+    if (prExists) {
+      // Update existing PR with new content
+      console.log('Updating existing Pull Request...')
+      await $`gh pr edit ${currentBranch} --title ${prContent.title} --body ${prContent.description}`
+      console.log('Pull Request updated!')
     } else {
-      console.log('Pushing branch to remote...')
-    }
-
-    const pushed = await pushBranch()
-    if (!pushed) {
-      console.error('Failed to push branch.')
-      process.exit(1)
-    }
-    console.log(shouldPush ? 'Branch pushed.' : 'Branch updated.')
-
-    // 15. Create PR (check if one already exists first)
-    console.log('Creating Pull Request...')
-    let prUrl
-    try {
-      const existing = await $`gh pr view ${currentBranch} --json url --jq .url`
-      prUrl = existing.stdout.trim()
-      console.log('Pull Request already exists, updated with latest push.')
-    } catch {
-      // No existing PR, create a new one
+      // Create new PR
+      console.log('Creating Pull Request...')
       const result = await $`gh pr create --title ${prContent.title} --body ${prContent.description} --head ${currentBranch}`
       prUrl = result.stdout.trim()
       console.log('Pull Request created!')
