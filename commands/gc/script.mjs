@@ -40,10 +40,30 @@ function stopSpinner(handle) {
 }
 
 /**
+ * Check if a command exists in PATH
+ * @param {string} cmd
+ * @returns {boolean}
+ */
+function commandExists(cmd) {
+  try {
+    spawnSync(cmd, ['--version'], { stdio: 'ignore' })
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
  * @description AI-powered commit message generator
  */
 export async function run(args) {
   try {
+    // 0. Check for lazygit and open it if available
+    const hasLazygit = commandExists('lazygit')
+    if (hasLazygit) {
+      spawnSync('lazygit', [], { stdio: 'inherit' })
+    }
+
     // 1. Check staged changes
     const hasChanges = await hasStagedChanges()
     if (!hasChanges) {
