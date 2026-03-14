@@ -30,7 +30,7 @@ brew tap choufeng/qk && brew install qk
 | `qk pack` | Chain-build packages and apps based on dependency order |
 | `qk pack-watch` | Check and clean up residual processes from pack |
 | `qk release` | Manage GitHub releases and version tags |
-| `qk ai-chat [prompt]` | Test AI integration with LangChain |
+| `qk chat [prompt]` | Test AI integration with LangChain |
 | `qk hello-world` | Print hello world message |
 
 ## Usage
@@ -75,5 +75,5 @@ qk release list
 
 ```bash
 # Chat with AI
-qk ai-chat "Your question or prompt"
+qk chat "Your question or prompt"
 ```
