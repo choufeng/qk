@@ -113,6 +113,7 @@ export async function run(args) {
     const config = new ConfigManager()
     const language = config.get('ai.language') || 'en'
     const provider = config.get('ai.provider')
+    const autoPR = config.get('git.autoPR')
     const prompt = template
       .replace(/\{\{LANGUAGE\}\}/g, language)
       .replace(/\{\{TICKET\}\}/g, ticket || 'No ticket found')
