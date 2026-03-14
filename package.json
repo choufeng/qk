@@ -1,6 +1,6 @@
 {
   "name": "qk",
-  "version": "1.7.6",
+  "version": "1.7.7",
   "description": "QK CLI - A powerful command-line tool built with ZX and Commander.js",
   "type": "module",
   "main": "cli.mjs",
@@ -27,6 +27,7 @@
     "@langchain/core": "^1.1.32",
     "@langchain/google-vertexai": "^2.1.25",
     "@langchain/ollama": "^1.2.6",
+    "chalk": "^5.6.2",
     "commander": "^12.1.0",
     "js-yaml": "^4.1.1",
     "zx": "^8.8.5"

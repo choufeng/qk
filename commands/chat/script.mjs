@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 
+import chalk from 'chalk';
 import { $ } from 'zx';
 import { launch } from '../../lib/ai/index.mjs';
 
@@ -48,11 +49,11 @@ export async function run(args) {
 
     stopSpinner(spinner)
 
-    console.log('\nAI Response:');
-    console.log(response.content);
-    console.log('\nUsage:');
-    console.log(`  Total tokens: ${response.usage.totalTokens}`);
-    console.log(`  Model: ${response.model}`);
+    console.log(`\n${chalk.bold.cyan('🤖 AI Response:')}`);
+    console.log(chalk.bold.green(response.content));
+    console.log(`\n${chalk.dim.gray('─── Usage ───')}`);
+    console.log(chalk.dim.gray(`  Total tokens: ${response.usage.totalTokens}`));
+    console.log(chalk.dim.gray(`  Model: ${response.model}`));
   } catch (error) {
     stopSpinner(spinner)
     console.error('Error:', error.message);
