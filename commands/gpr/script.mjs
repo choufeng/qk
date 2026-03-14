@@ -130,8 +130,11 @@ export async function run(args) {
     }
     let prContent = parsePrContent(response.content)
 
-    // 10. Open editor (unless --no-edit or --dry-run)
-    if (!noEdit && !dryRun) {
+    // 10. Check autoPR config
+    const autoPR = config.get('git.autoPR')
+
+    // 10.1 Open editor (unless --no-edit, --dry-run, or autoPR)
+    if (!noEdit && !dryRun && autoPR !== true) {
       const tmpFile = `/tmp/qk-pr-${Date.now()}.md`
       const editorContent = [
         '# PR Title',
@@ -177,11 +180,13 @@ export async function run(args) {
       process.exit(0)
     }
 
-    // 13. Confirm
-    const ok = await confirm({ message: 'Create Pull Request?', default: true })
-    if (!ok) {
-      console.log('Cancelled.')
-      process.exit(0)
+    // 13. Confirm (skip if autoPR is true)
+    if (autoPR !== true) {
+      const ok = await confirm({ message: 'Create Pull Request?', default: true })
+      if (!ok) {
+        console.log('Cancelled.')
+        process.exit(0)
+      }
     }
 
     // 14. Push branch if needed

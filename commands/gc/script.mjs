@@ -40,10 +40,32 @@ function stopSpinner(handle) {
 }
 
 /**
+ * Check if a command exists in PATH
+ * @param {string} cmd
+ * @returns {boolean}
+ */
+function commandExists(cmd) {
+  try {
+    spawnSync(cmd, ['--version'], { stdio: 'ignore' })
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
  * @description AI-powered commit message generator
  */
 export async function run(args) {
   try {
+    // 0. Check for lazygit and config, open it if available
+    const config = new ConfigManager()
+    const hasLazygit = commandExists('lazygit')
+    const useLazygit = config.get('git.useLazygit')
+    if (hasLazygit && useLazygit === true) {
+      spawnSync('lazygit', [], { stdio: 'inherit' })
+    }
+
     // 1. Check staged changes
     const hasChanges = await hasStagedChanges()
     if (!hasChanges) {
@@ -91,7 +113,6 @@ export async function run(args) {
     }
 
     // 4. Inject placeholders
-    const config = new ConfigManager()
     const language = config.get('ai.language') || 'en'
     const provider = config.get('ai.provider')
     const prompt = template
@@ -111,46 +132,52 @@ export async function run(args) {
     // 6. Parse AI response into commit message
     const commitMessage = parseCommitMessage(rawMessage)
 
-    // 7. Write to temp file and open editor
-    const tmpFile = `/tmp/qk-commit-${Date.now()}.txt`
-    const editorContent = [
-      commitMessage,
-      '',
-      '# Please edit your commit message above.',
-      '# Lines starting with # will be ignored.',
-      '# Save and exit to proceed. Empty message cancels the commit.',
-    ].join('\n')
+    // 6.5 Check autoCommit config
+    const autoCommit = config.get('git.autoCommit')
 
-    writeFileSync(tmpFile, editorContent, 'utf-8')
+    let finalMessage = commitMessage
+    if (autoCommit !== true) {
+      // 7. Write to temp file and open editor
+      const tmpFile = `/tmp/qk-commit-${Date.now()}.txt`
+      const editorContent = [
+        commitMessage,
+        '',
+        '# Please edit your commit message above.',
+        '# Lines starting with # will be ignored.',
+        '# Save and exit to proceed. Empty message cancels the commit.',
+      ].join('\n')
 
-    const editor = process.env.EDITOR || 'vim'
-    spawnSync(editor, [tmpFile], { stdio: 'inherit' })
+      writeFileSync(tmpFile, editorContent, 'utf-8')
 
-    // 8. Read and clean edited content
-    const edited = readFileSync(tmpFile, 'utf-8')
-    const finalMessage = edited
-      .split('\n')
-      .filter(line => !line.startsWith('#'))
-      .join('\n')
-      .trim()
+      const editor = process.env.EDITOR || 'vim'
+      spawnSync(editor, [tmpFile], { stdio: 'inherit' })
 
-    unlinkSync(tmpFile)
+      // 8. Read and clean edited content
+      const edited = readFileSync(tmpFile, 'utf-8')
+      finalMessage = edited
+        .split('\n')
+        .filter(line => !line.startsWith('#'))
+        .join('\n')
+        .trim()
 
-    if (!finalMessage) {
-      console.log('Empty commit message, commit cancelled.')
-      process.exit(0)
-    }
+      unlinkSync(tmpFile)
 
-    // 9. Preview and confirm
-    console.log('\nCommit message:')
-    console.log('─'.repeat(50))
-    console.log(finalMessage)
-    console.log('─'.repeat(50))
+      if (!finalMessage) {
+        console.log('Empty commit message, commit cancelled.')
+        process.exit(0)
+      }
 
-    const ok = await confirm({ message: 'Commit with this message?', default: true })
-    if (!ok) {
-      console.log('Cancelled.')
-      process.exit(0)
+      // 9. Preview and confirm
+      console.log('\nCommit message:')
+      console.log('─'.repeat(50))
+      console.log(finalMessage)
+      console.log('─'.repeat(50))
+
+      const ok = await confirm({ message: 'Commit with this message?', default: true })
+      if (!ok) {
+        console.log('Cancelled.')
+        process.exit(0)
+      }
     }
 
     // 10. Execute commit
