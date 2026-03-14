@@ -151,7 +151,7 @@ export async function run(args) {
     // 11. If PR exists, skip AI generation and just update the PR
     let prContent
     if (prExists) {
-      console.log(chalk.yellow('Pull Request already exists, updating with latest push.'))
+      console.log(chalk.yellow('Pull Request already exists, skipping AI generation.'))
       // Get existing PR info to reuse title and description
       try {
         const prInfo = await $`gh pr view ${currentBranch} --json title,body --jq '.title, .body'`
