@@ -4,7 +4,7 @@ import { readFileSync, writeFileSync, unlinkSync } from 'fs'
 import { spawnSync } from 'child_process'
 import { $ } from 'zx'
 import chalk from 'chalk'
-import { confirm } from '@inquirer/prompts'
+import { confirm, select } from '@inquirer/prompts'
 import { launch } from '../../lib/ai/index.mjs'
 import { ConfigManager } from '../../lib/config/index.mjs'
 import {
@@ -49,6 +49,47 @@ function startSpinner(message) {
 function stopSpinner(handle) {
   clearInterval(handle)
   process.stdout.write('\r\x1b[K') // clear line
+}
+
+/**
+ * Check if package version was upgraded in current branch
+ * @returns {{upgraded: boolean, oldVersion: string|null, newVersion: string|null}}
+ */
+async function checkVersionUpgrade() {
+  try {
+    const mainBranch = await getMainBranch()
+    
+    let mainVersion = null
+    let currentVersion = null
+    
+    try {
+      const mainPkg = await $`git show ${mainBranch}:package.json`
+      const mainPkgJson = JSON.parse(mainPkg.stdout.trim())
+      mainVersion = mainPkgJson.version
+    } catch {
+      return { upgraded: false, oldVersion: null, newVersion: null }
+    }
+    
+    try {
+      const currentPkg = await $`git show HEAD:package.json`
+      const currentPkgJson = JSON.parse(currentPkg.stdout.trim())
+      currentVersion = currentPkgJson.version
+    } catch {
+      return { upgraded: false, oldVersion: null, newVersion: null }
+    }
+    
+    if (mainVersion && currentVersion && mainVersion !== currentVersion) {
+      return {
+        upgraded: true,
+        oldVersion: mainVersion,
+        newVersion: currentVersion
+      }
+    }
+    
+    return { upgraded: false, oldVersion: null, newVersion: null }
+  } catch {
+    return { upgraded: false, oldVersion: null, newVersion: null }
+  }
 }
 
 /**
@@ -223,6 +264,26 @@ export async function run(args) {
       process.exit(0)
     }
 
+    // 12.5 Check for version upgrade and ask PR type
+    let isDraft = false
+    if (!prExists) {
+      const versionInfo = await checkVersionUpgrade()
+      if (versionInfo.upgraded) {
+        console.log(chalk.yellow(`\n⚠️ Version upgrade detected: ${versionInfo.oldVersion} → ${versionInfo.newVersion}`))
+        
+        const prType = await select({
+          message: 'Create a draft or ready PR?',
+          choices: [
+            { name: 'Ready PR', value: 'ready' },
+            { name: 'Draft PR', value: 'draft' },
+          ],
+        })
+        
+        isDraft = prType === 'draft'
+        console.log(chalk.gray(`→ PR Type: ${isDraft ? 'Draft' : 'Ready'}`))
+      }
+    }
+
     // 13. Confirm (skip if autoPR is true or PR already exists)
     if (autoPR !== true && !prExists) {
       const ok = await confirm({ message: 'Create Pull Request?', default: true })
@@ -241,7 +302,10 @@ export async function run(args) {
     } else {
       // Create new PR
       console.log(chalk.cyan('Creating Pull Request...'))
-      const result = await $`gh pr create --title ${prContent.title} --body ${prContent.description} --head ${currentBranch}`
+      const createCmd = isDraft
+        ? $`gh pr create --title ${prContent.title} --body ${prContent.description} --head ${currentBranch} --draft`
+        : $`gh pr create --title ${prContent.title} --body ${prContent.description} --head ${currentBranch}`
+      const result = await createCmd
       prUrl = result.stdout.trim()
       console.log(chalk.green('✓ Pull Request created!'))
     }
