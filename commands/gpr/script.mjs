@@ -274,8 +274,8 @@ export async function run(args) {
         const prType = await select({
           message: 'Create a draft or ready PR?',
           choices: [
-            { name: 'Ready PR (正式版本)', value: 'ready' },
-            { name: 'Draft PR (草稿版本)', value: 'draft' },
+            { name: 'Ready PR', value: 'ready' },
+            { name: 'Draft PR', value: 'draft' },
           ],
         })
         
