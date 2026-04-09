@@ -294,21 +294,24 @@ export async function run(args) {
     }
 
     // 14. Create or update PR
+    const bodyFile = `/tmp/qk-pr-body-${Date.now()}.md`
+    writeFileSync(bodyFile, prContent.description, 'utf-8')
+
     if (prExists) {
-      // Update existing PR with new content
       console.log(chalk.cyan('Updating existing Pull Request...'))
-      await $`gh pr edit ${currentBranch} --title ${prContent.title} --body ${prContent.description}`
+      await $`gh pr edit ${currentBranch} --title ${$.quote(prContent.title)} --body-file ${bodyFile}`
       console.log(chalk.green('✓ Pull Request updated!'))
     } else {
-      // Create new PR
       console.log(chalk.cyan('Creating Pull Request...'))
       const createCmd = isDraft
-        ? $`gh pr create --title ${prContent.title} --body ${prContent.description} --head ${currentBranch} --draft`
-        : $`gh pr create --title ${prContent.title} --body ${prContent.description} --head ${currentBranch}`
+        ? $`gh pr create --title ${$.quote(prContent.title)} --body-file ${bodyFile} --head ${currentBranch} --draft`
+        : $`gh pr create --title ${$.quote(prContent.title)} --body-file ${bodyFile} --head ${currentBranch}`
       const result = await createCmd
       prUrl = result.stdout.trim()
       console.log(chalk.green('✓ Pull Request created!'))
     }
+
+    try { unlinkSync(bodyFile) } catch {}
     console.log(chalk.bold.blue(`🔗 PR URL: ${prUrl}`))
 
   } catch (error) {

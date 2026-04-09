@@ -49,6 +49,11 @@ QA DECISION RULES:
 - Pure backend logic, database, refactoring, config → [QA: None]
 - Tests, docs, build scripts → [QA: None]
 
+QA FORMAT RULES:
+- QA information MUST be wrapped in brackets, forming structures like `[QA: None]` or `[QA: Verify]`
+- A space MUST follow the colon, then the QA type (None/Verify)
+- Other formats are NOT allowed, such as `QA: None`, `[QA:None]`, `(QA: None)`, etc.
+
 VERSION UPGRADE DETECTION:
 - Look at the diff to check if package.json version field changed
 - If changed: determine the upgrade type (patch: x.y.Z where only Z changes, minor: x.Y.z where Y changes, major: X.y.z where X changes)
