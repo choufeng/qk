@@ -270,8 +270,8 @@ export async function run(args) {
       const prType = await select({
         message: 'Create a draft or ready PR?',
         choices: [
-          { name: 'Ready PR', value: 'ready' },
           { name: 'Draft PR', value: 'draft' },
+          { name: 'Ready PR', value: 'ready' },
         ],
       })
       
