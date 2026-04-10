@@ -264,24 +264,19 @@ export async function run(args) {
       process.exit(0)
     }
 
-    // 12.5 Check for version upgrade and ask PR type
+    // 12.5 Ask PR type (always ask for new PR)
     let isDraft = false
     if (!prExists) {
-      const versionInfo = await checkVersionUpgrade()
-      if (versionInfo.upgraded) {
-        console.log(chalk.yellow(`\n⚠️ Version upgrade detected: ${versionInfo.oldVersion} → ${versionInfo.newVersion}`))
-        
-        const prType = await select({
-          message: 'Create a draft or ready PR?',
-          choices: [
-            { name: 'Ready PR', value: 'ready' },
-            { name: 'Draft PR', value: 'draft' },
-          ],
-        })
-        
-        isDraft = prType === 'draft'
-        console.log(chalk.gray(`→ PR Type: ${isDraft ? 'Draft' : 'Ready'}`))
-      }
+      const prType = await select({
+        message: 'Create a draft or ready PR?',
+        choices: [
+          { name: 'Ready PR', value: 'ready' },
+          { name: 'Draft PR', value: 'draft' },
+        ],
+      })
+      
+      isDraft = prType === 'draft'
+      console.log(chalk.gray(`→ PR Type: ${isDraft ? 'Draft' : 'Ready'}`))
     }
 
     // 13. Confirm (skip if autoPR is true or PR already exists)
