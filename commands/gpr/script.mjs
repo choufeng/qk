@@ -270,8 +270,8 @@ export async function run(args) {
       const prType = await select({
         message: 'Create a draft or ready PR?',
         choices: [
-          { name: 'Ready PR', value: 'ready' },
           { name: 'Draft PR', value: 'draft' },
+          { name: 'Ready PR', value: 'ready' },
         ],
       })
       
@@ -294,13 +294,13 @@ export async function run(args) {
 
     if (prExists) {
       console.log(chalk.cyan('Updating existing Pull Request...'))
-      await $`gh pr edit ${currentBranch} --title ${$.quote(prContent.title)} --body-file ${bodyFile}`
+      await $`gh pr edit ${currentBranch} --title ${prContent.title} --body-file ${bodyFile}`
       console.log(chalk.green('✓ Pull Request updated!'))
     } else {
       console.log(chalk.cyan('Creating Pull Request...'))
       const createCmd = isDraft
-        ? $`gh pr create --title ${$.quote(prContent.title)} --body-file ${bodyFile} --head ${currentBranch} --draft`
-        : $`gh pr create --title ${$.quote(prContent.title)} --body-file ${bodyFile} --head ${currentBranch}`
+        ? $`gh pr create --title ${prContent.title} --body-file ${bodyFile} --head ${currentBranch} --draft`
+        : $`gh pr create --title ${prContent.title} --body-file ${bodyFile} --head ${currentBranch}`
       const result = await createCmd
       prUrl = result.stdout.trim()
       console.log(chalk.green('✓ Pull Request created!'))
