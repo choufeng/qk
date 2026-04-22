@@ -218,7 +218,7 @@ export async function run(args) {
 
     // 12.1 E2E tag selection (only for new PRs)
     const e2eTags = config.get('git.e2eTags') || []
-    if (e2eTags.length > 0 && !prExists) {
+    if (e2eTags.length > 0 && !prExists && autoPR !== true && !dryRun) {
       const selectedTags = await checkbox({
         message: 'Select E2E tags for this PR (optional):',
         choices: e2eTags.map(tag => ({ name: tag, value: tag })),
