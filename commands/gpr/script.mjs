@@ -216,7 +216,25 @@ export async function run(args) {
       prContent = parsePrContent(response.content)
     }
 
-    // 12.1 Open editor (unless --no-edit, --dry-run, autoPR, or PR already exists)
+    // 12.1 E2E tag selection (only for new PRs)
+    const e2eTags = config.get('git.e2eTags') || []
+    if (e2eTags.length > 0 && !prExists) {
+      const selectedTags = await checkbox({
+        message: 'Select E2E tags for this PR (optional):',
+        choices: e2eTags.map(tag => ({ name: tag, value: tag })),
+      })
+
+      if (selectedTags.length > 0) {
+        const e2eLine = `[E2E: ${selectedTags.join(', ')}]`
+        if (prContent.description) {
+          prContent.description = prContent.description.trimEnd() + '\n\n' + e2eLine
+        } else {
+          prContent.description = e2eLine
+        }
+      }
+    }
+
+    // 12.2 Open editor (unless --no-edit, --dry-run, autoPR, or PR already exists)
     if (!noEdit && !dryRun && autoPR !== true && !prExists) {
       const tmpFile = `/tmp/qk-pr-${Date.now()}.md`
       const editorContent = [
