@@ -338,9 +338,10 @@ export async function run(args) {
       console.log(chalk.green('✓ Pull Request updated!'))
     } else {
       console.log(chalk.cyan('Creating Pull Request...'))
+      const labelArgs = selectedLabels.flatMap(l => ['--label', l])
       const createCmd = isDraft
-        ? $`gh pr create --title ${prContent.title} --body-file ${bodyFile} --head ${currentBranch} --draft`
-        : $`gh pr create --title ${prContent.title} --body-file ${bodyFile} --head ${currentBranch}`
+        ? $`gh pr create --title ${prContent.title} --body-file ${bodyFile} --head ${currentBranch} --draft ${labelArgs}`
+        : $`gh pr create --title ${prContent.title} --body-file ${bodyFile} --head ${currentBranch} ${labelArgs}`
       const result = await createCmd
       prUrl = result.stdout.trim()
       console.log(chalk.green('✓ Pull Request created!'))
