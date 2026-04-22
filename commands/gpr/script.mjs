@@ -234,7 +234,29 @@ export async function run(args) {
       }
     }
 
-    // 12.2 Open editor (unless --no-edit, --dry-run, autoPR, or PR already exists)
+    // 12.2 Label selection (only for new PRs)
+    const prLabels = config.get('git.prLabels') || []
+    let selectedLabels = []
+    if (prLabels.length > 0 && !prExists && autoPR !== true && !dryRun) {
+      let remoteLabels = []
+      try {
+        const labelResult = await $`gh label list --json name --jq '.[].name'`
+        remoteLabels = labelResult.stdout.trim().split('\n').filter(Boolean)
+      } catch {
+        // Silently skip if gh label list fails
+      }
+
+      const availableLabels = remoteLabels.filter(name => prLabels.includes(name))
+
+      if (availableLabels.length > 0) {
+        selectedLabels = await checkbox({
+          message: 'Select labels for this PR (optional):',
+          choices: availableLabels.map(tag => ({ name: tag, value: tag })),
+        })
+      }
+    }
+
+    // 12.3 Open editor (unless --no-edit, --dry-run, autoPR, or PR already exists)
     if (!noEdit && !dryRun && autoPR !== true && !prExists) {
       const tmpFile = `/tmp/qk-pr-${Date.now()}.md`
       const editorContent = [
