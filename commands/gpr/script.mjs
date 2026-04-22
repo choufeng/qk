@@ -4,7 +4,7 @@ import { readFileSync, writeFileSync, unlinkSync } from 'fs'
 import { spawnSync } from 'child_process'
 import { $ } from 'zx'
 import chalk from 'chalk'
-import { confirm, select } from '@inquirer/prompts'
+import { confirm, select, checkbox } from '@inquirer/prompts'
 import { launch } from '../../lib/ai/index.mjs'
 import { ConfigManager } from '../../lib/config/index.mjs'
 import {
@@ -216,7 +216,47 @@ export async function run(args) {
       prContent = parsePrContent(response.content)
     }
 
-    // 12.1 Open editor (unless --no-edit, --dry-run, autoPR, or PR already exists)
+    // 12.1 E2E tag selection (only for new PRs)
+    const e2eTags = config.get('git.e2eTags') || []
+    if (e2eTags.length > 0 && !prExists && autoPR !== true && !dryRun) {
+      const selectedTags = await checkbox({
+        message: 'Select E2E tags for this PR (optional):',
+        choices: e2eTags.map(tag => ({ name: tag, value: tag })),
+      })
+
+      if (selectedTags.length > 0) {
+        const e2eLine = `[E2E: ${selectedTags.join(', ')}]`
+        if (prContent.description) {
+          prContent.description = prContent.description.trimEnd() + '\n\n' + e2eLine
+        } else {
+          prContent.description = e2eLine
+        }
+      }
+    }
+
+    // 12.2 Label selection (only for new PRs)
+    const prLabels = config.get('git.prLabels') || []
+    let selectedLabels = []
+    if (prLabels.length > 0 && !prExists && autoPR !== true && !dryRun) {
+      let remoteLabels = []
+      try {
+        const labelResult = await $`gh label list --json name --jq '.[].name'`
+        remoteLabels = labelResult.stdout.trim().split('\n').filter(Boolean)
+      } catch {
+        // Silently skip if gh label list fails
+      }
+
+      const availableLabels = remoteLabels.filter(name => prLabels.includes(name))
+
+      if (availableLabels.length > 0) {
+        selectedLabels = await checkbox({
+          message: 'Select labels for this PR (optional):',
+          choices: availableLabels.map(tag => ({ name: tag, value: tag })),
+        })
+      }
+    }
+
+    // 12.3 Open editor (unless --no-edit, --dry-run, autoPR, or PR already exists)
     if (!noEdit && !dryRun && autoPR !== true && !prExists) {
       const tmpFile = `/tmp/qk-pr-${Date.now()}.md`
       const editorContent = [
@@ -298,9 +338,10 @@ export async function run(args) {
       console.log(chalk.green('✓ Pull Request updated!'))
     } else {
       console.log(chalk.cyan('Creating Pull Request...'))
+      const labelArgs = selectedLabels.flatMap(l => ['--label', l])
       const createCmd = isDraft
-        ? $`gh pr create --title ${prContent.title} --body-file ${bodyFile} --head ${currentBranch} --draft`
-        : $`gh pr create --title ${prContent.title} --body-file ${bodyFile} --head ${currentBranch}`
+        ? $`gh pr create --title ${prContent.title} --body-file ${bodyFile} --head ${currentBranch} --draft ${labelArgs}`
+        : $`gh pr create --title ${prContent.title} --body-file ${bodyFile} --head ${currentBranch} ${labelArgs}`
       const result = await createCmd
       prUrl = result.stdout.trim()
       console.log(chalk.green('✓ Pull Request created!'))
