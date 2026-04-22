@@ -4,7 +4,7 @@ import { readFileSync, writeFileSync, unlinkSync } from 'fs'
 import { spawnSync } from 'child_process'
 import { $ } from 'zx'
 import chalk from 'chalk'
-import { confirm, select } from '@inquirer/prompts'
+import { confirm, select, checkbox } from '@inquirer/prompts'
 import { launch } from '../../lib/ai/index.mjs'
 import { ConfigManager } from '../../lib/config/index.mjs'
 import {
