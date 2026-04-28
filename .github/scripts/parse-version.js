@@ -1,7 +1,5 @@
 #!/usr/bin/env bun
 
-import { readFileSync } from 'fs';
-
 /**
  * 解析 PR 信息，确定版本升级级别
  * 优先级: major > minor > patch
@@ -32,7 +30,7 @@ let level = 'patch';
 // 优先级: major > minor > patch
 // Major: break, !:, BREAKING CHANGE
 if (
-  allTexts.includes('break') ||
+  allTexts.match(/\bbreak\b/) ||
   allTexts.includes('!:') ||
   allTexts.includes('breaking change')
 ) {
@@ -46,13 +44,4 @@ else if (
 ) {
   level = 'minor';
 }
-// Patch: fix, bugfix, 或其他
-else if (
-  allTexts.match(/\bfix\b/) ||
-  allTexts.match(/\bbugfix\b/) ||
-  allTexts.match(/\bbug fix\b/)
-) {
-  level = 'patch';
-}
-
 console.log(level);
