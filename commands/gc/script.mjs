@@ -4,7 +4,7 @@ import { readFileSync, writeFileSync, unlinkSync } from 'fs'
 import { spawnSync } from 'child_process'
 import { $ } from 'zx'
 import chalk from 'chalk'
-import { confirm, checkbox } from '@inquirer/prompts'
+import * as p from '@clack/prompts'
 import { launch } from '../../lib/ai/index.mjs'
 import { ConfigManager } from '../../lib/config/index.mjs'
 import { hasStagedChanges, getStagedDiff, getModifiedFiles } from '../../lib/git/index.mjs'
@@ -15,30 +15,6 @@ $.verbose = false
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const PROMPTS_DIR = join(__dirname, '../../configs/prompts')
-
-/**
- * Start a terminal spinner, returns the interval handle
- * @param {string} message
- * @returns {NodeJS.Timeout}
- */
-function startSpinner(message) {
-  const frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
-  let i = 0
-  process.stdout.write(`${frames[i]} ${message}`)
-  return setInterval(() => {
-    i = (i + 1) % frames.length
-    process.stdout.write(`\r${frames[i]} ${message}`)
-  }, 80)
-}
-
-/**
- * Stop the spinner and clear the line
- * @param {NodeJS.Timeout} handle
- */
-function stopSpinner(handle) {
-  clearInterval(handle)
-  process.stdout.write('\r\x1b[K') // clear line
-}
 
 /**
  * Check if a command exists in PATH
@@ -58,6 +34,8 @@ function commandExists(cmd) {
  * @description AI-powered commit message generator
  */
 export async function run(args) {
+  p.intro(chalk.bgCyan.black(' QK · GC '))
+
   try {
     // 0. Check for lazygit and config, open it if available
     const config = new ConfigManager()
@@ -70,30 +48,22 @@ export async function run(args) {
     // 1. Check staged changes
     const hasChanges = await hasStagedChanges()
     if (!hasChanges) {
-      // No staged changes, offer to select from modified files
       const modifiedFiles = await getModifiedFiles()
-      
+
       if (modifiedFiles.length === 0) {
-        console.log(chalk.yellow('No staged changes and no modified files found.'))
+        p.cancel('No staged changes and no modified files found.')
         process.exit(0)
       }
 
-      console.log(chalk.cyan('\nNo staged changes found. Select files to add:\n'))
-
-      const selected = await checkbox({
-        message: 'Choose files to stage:',
-        choices: modifiedFiles.map(({ absolute, display }) => ({ name: display, value: absolute })),
+      const selected = await p.multiselect({
+        message: 'No staged changes. Choose files to stage:',
+        options: modifiedFiles.map(({ absolute, display }) => ({ label: display, value: absolute })),
+        required: true,
       })
+      if (p.isCancel(selected)) { p.cancel('Cancelled.'); process.exit(0) }
 
-      if (!selected || selected.length === 0) {
-        console.log(chalk.yellow('No files selected, cancelled.'))
-        process.exit(0)
-      }
-
-      // Add selected files using absolute paths to avoid cwd-relative path issues
-      const filesToAdd = Array.isArray(selected) ? selected : [selected]
-      await $`git add ${filesToAdd}`
-      console.log(chalk.green(`\nStaged ${filesToAdd.length} file(s).\n`))
+      await $`git add ${selected}`
+      p.log.success(`Staged ${selected.length} file(s).`)
     }
 
     // 2. Load prompt template
@@ -121,12 +91,15 @@ export async function run(args) {
       .replace(/\{\{DIFF\}\}/g, diff)
 
     // 5. Call AI with spinner
-    const spinner = startSpinner(chalk.cyan(`Generating commit message via ${provider}...`))
+    const aiSpinner = p.spinner()
+    aiSpinner.start(`Generating commit message via ${provider}...`)
     let response
     try {
       response = await launch(prompt, { temperature: 0.3 })
-    } finally {
-      stopSpinner(spinner)
+      aiSpinner.stop('Commit message generated.')
+    } catch (err) {
+      aiSpinner.stop('AI generation failed.', 1)
+      throw err
     }
     const rawMessage = response.content
 
@@ -164,33 +137,26 @@ export async function run(args) {
       unlinkSync(tmpFile)
 
       if (!finalMessage) {
-        console.log(chalk.yellow('Empty commit message, commit cancelled.'))
+        p.cancel('Empty commit message, commit cancelled.')
         process.exit(0)
       }
 
       // 9. Preview and confirm
-      console.log(chalk.cyan('\nCommit message:'))
-      console.log(chalk.gray('─'.repeat(50)))
-      console.log(chalk.white(finalMessage))
-      console.log(chalk.gray('─'.repeat(50)))
+      p.note(finalMessage, 'Commit message')
 
-      const ok = await confirm({ message: 'Commit with this message?', default: true })
-      if (!ok) {
-        console.log(chalk.yellow('Cancelled.'))
+      const ok = await p.confirm({ message: 'Commit with this message?', initialValue: true })
+      if (p.isCancel(ok) || !ok) {
+        p.cancel('Cancelled.')
         process.exit(0)
       }
     }
 
     // 10. Execute commit
     await $`git commit -m ${finalMessage}`
-    console.log(chalk.green('✓ Changes committed successfully!'))
+    p.outro(chalk.green('Changes committed successfully.'))
 
   } catch (error) {
-    if (error.name === 'ExitPromptError') {
-      console.log(chalk.yellow('\nCancelled.'))
-      process.exit(0)
-    }
-    console.error(chalk.red(`Error: ${error.message}`))
+    p.cancel(`Error: ${error.message}`)
     process.exit(1)
   }
 }
