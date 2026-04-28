@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 
-import { select, input, confirm } from '@inquirer/prompts'
+import * as p from '@clack/prompts'
+import chalk from 'chalk'
 import { ConfigManager } from '../../lib/config/index.mjs'
 import { PROVIDER_DEFAULTS } from '../../lib/config/schema.mjs'
 
@@ -8,83 +9,84 @@ import { PROVIDER_DEFAULTS } from '../../lib/config/schema.mjs'
  * @description Interactive global configuration for qk
  */
 export async function run(args) {
+  p.intro(chalk.bgCyan.black(' QK · SET '))
+
   try {
     const config = new ConfigManager()
 
-    console.log('\nqk Configuration\n')
-
     // Step 1: Choose AI provider
-    const provider = await select({
+    const provider = await p.select({
       message: 'AI Provider',
-      choices: [
-        { name: 'Ollama (local)', value: 'ollama' },
-        { name: 'Vertex AI (Google Cloud)', value: 'vertex' },
+      options: [
+        { value: 'ollama',  label: 'Ollama',      hint: 'local' },
+        { value: 'vertex',  label: 'Vertex AI',   hint: 'Google Cloud' },
       ],
-      default: config.get('ai.provider'),
+      initialValue: config.get('ai.provider'),
     })
-
+    if (p.isCancel(provider)) { p.cancel('Cancelled.'); process.exit(0) }
     config.set('ai.provider', provider)
 
     // Step 2: Choose response language
-    const language = await select({
+    const language = await p.select({
       message: 'Response language',
-      choices: [
-        { name: 'English', value: 'en' },
-        { name: '简体中文', value: 'zh-CN' },
-        { name: '繁體中文', value: 'zh-TW' },
+      options: [
+        { value: 'en',    label: 'English' },
+        { value: 'zh-CN', label: '简体中文' },
+        { value: 'zh-TW', label: '繁體中文' },
       ],
-      default: config.get('ai.language') || 'en',
+      initialValue: config.get('ai.language') || 'en',
     })
+    if (p.isCancel(language)) { p.cancel('Cancelled.'); process.exit(0) }
     config.set('ai.language', language)
 
     // Step 3: Provider-specific config
     if (provider === 'ollama') {
-      const endpoint = await input({
+      const endpoint = await p.text({
         message: 'Ollama endpoint',
-        default: config.get('ai.ollama.endpoint') || PROVIDER_DEFAULTS.ollama.endpoint,
+        placeholder: PROVIDER_DEFAULTS.ollama.endpoint,
+        initialValue: config.get('ai.ollama.endpoint') || PROVIDER_DEFAULTS.ollama.endpoint,
       })
-      const model = await input({
+      if (p.isCancel(endpoint)) { p.cancel('Cancelled.'); process.exit(0) }
+
+      const model = await p.text({
         message: 'Ollama model',
-        default: config.get('ai.ollama.model') || PROVIDER_DEFAULTS.ollama.model,
+        placeholder: PROVIDER_DEFAULTS.ollama.model,
+        initialValue: config.get('ai.ollama.model') || PROVIDER_DEFAULTS.ollama.model,
       })
+      if (p.isCancel(model)) { p.cancel('Cancelled.'); process.exit(0) }
+
       config.set('ai.ollama.endpoint', endpoint)
       config.set('ai.ollama.model', model)
     } else {
-      const model = await input({
+      const model = await p.text({
         message: 'Vertex AI model',
-        default: config.get('ai.vertex.model') || PROVIDER_DEFAULTS.vertex.model,
+        placeholder: PROVIDER_DEFAULTS.vertex.model,
+        initialValue: config.get('ai.vertex.model') || PROVIDER_DEFAULTS.vertex.model,
       })
+      if (p.isCancel(model)) { p.cancel('Cancelled.'); process.exit(0) }
+
       config.set('ai.vertex.model', model)
-      console.log('\n  Auth: using environment variables')
-      console.log('  (GOOGLE_CLOUD_PROJECT, GOOGLE_CLOUD_LOCATION)\n')
+      p.log.info('Auth: using env vars GOOGLE_CLOUD_PROJECT, GOOGLE_CLOUD_LOCATION')
     }
 
     // Step 4: Summary and confirm
     const ai = config.get('ai')
-    console.log('\nConfiguration summary:')
-    console.log(`  provider: ${ai.provider}`)
-    console.log(`  language: ${ai.language}`)
-    if (ai.provider === 'ollama') {
-      console.log(`  endpoint: ${ai.ollama.endpoint}`)
-      console.log(`  model:    ${ai.ollama.model}`)
-    } else {
-      console.log(`  model:    ${ai.vertex.model}`)
-    }
+    const summary = provider === 'ollama'
+      ? `provider: ${ai.provider}\nlanguage: ${ai.language}\nendpoint: ${ai.ollama.endpoint}\nmodel:    ${ai.ollama.model}`
+      : `provider: ${ai.provider}\nlanguage: ${ai.language}\nmodel:    ${ai.vertex.model}`
+    p.note(summary, 'Configuration summary')
 
-    const ok = await confirm({ message: 'Save configuration?', default: true })
-
-    if (ok) {
-      config.save()
-      console.log('\nConfiguration saved to ~/.config/qk/config.yaml')
-    } else {
-      console.log('\nCancelled, no changes saved.')
-    }
-  } catch (error) {
-    if (error.name === 'ExitPromptError') {
-      console.log('\nCancelled.')
+    const ok = await p.confirm({ message: 'Save configuration?', initialValue: true })
+    if (p.isCancel(ok) || !ok) {
+      p.cancel('No changes saved.')
       process.exit(0)
     }
-    console.error(`\nError: ${error.message}`)
+
+    config.save()
+    p.outro('Configuration saved to ~/.config/qk/config.yaml')
+
+  } catch (error) {
+    p.cancel(`Error: ${error.message}`)
     process.exit(1)
   }
 }
