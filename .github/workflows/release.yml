@@ -1,6 +1,5 @@
 name: Release
 
-# Trigger on pull request merged to main branch
 on:
   pull_request:
     branches:
@@ -9,27 +8,70 @@ on:
     types:
       - closed
 
-# Prevent concurrent workflows
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
-
-# Environment variables
-env:
-  NODE_VERSION: '18'
+  push:
+    tags:
+      - 'v*'
 
 permissions:
   contents: write
 
 jobs:
-  # Check version and create tag if needed
-  version-check:
-    name: Check Version and Create Tag
+  # Stage 1: 版本升级（PR 合并时）
+  version-bump:
+    name: Bump Version
     runs-on: ubuntu-latest
-    
+    if: github.event.pull_request.merged == true
     outputs:
-      new_tag_created: ${{ steps.version.outputs.new_tag_created }}
-      version: ${{ steps.version.outputs.version }}
+      new_version: ${{ steps.bump.outputs.new_version }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Parse commits and determine version level
+        id: parse
+        run: |
+          LEVEL=$(node .github/scripts/parse-version.js)
+          echo "level=$LEVEL" >> $GITHUB_OUTPUT
+          echo "Version level determined: $LEVEL"
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          COMMITS: ${{ toJSON(github.event.pull_request.commits) }}
+      
+      - name: Bump version
+        id: bump
+        run: |
+          NEW_VERSION=$(node .github/scripts/bump-version.js ${{ steps.parse.outputs.level }})
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "New version: $NEW_VERSION"
+      
+      - name: Commit and push version bump
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add package.json
+          git commit -m "chore: release v${{ steps.bump.outputs.new_version }} [release]"
+          git push origin main
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Create and push tag
+        run: |
+          TAG="v${{ steps.bump.outputs.new_version }}"
+          git tag $TAG
+          git push origin $TAG
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Stage 2: 构建和发布（tag 推送时）
+  build-and-release:
+    name: Build and Release
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
     
     steps:
       - name: Checkout code
@@ -37,47 +79,6 @@ jobs:
         with:
           fetch-depth: 0
       
-      - name: Get version from package.json
-        id: version
-        run: |
-          VERSION=$(node -e "console.log(JSON.parse(require('fs').readFileSync('package.json', 'utf8')).version)")
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          
-          # Check if tag already exists
-          TAG="v$VERSION"
-          echo "Checking for tag: $TAG"
-          if git rev-parse "refs/tags/$TAG" > /dev/null 2>&1; then
-            echo "new_tag_created=false" >> $GITHUB_OUTPUT
-            echo "Tag $TAG already exists, skipping tag creation"
-          else
-            echo "new_tag_created=true" >> $GITHUB_OUTPUT
-            echo "Tag $TAG does not exist, will be created"
-          fi
-      
-      - name: Create tag if needed
-        if: steps.version.outputs.new_tag_created == 'true'
-        run: |
-          VERSION=$(node -e "console.log(JSON.parse(require('fs').readFileSync('package.json', 'utf8')).version)")
-          TAG="v$VERSION"
-          echo "Creating tag $TAG..."
-          git config user.name "GitHub Actions"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag $TAG
-          git push origin $TAG
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  build-and-test:
-    name: Build and Test
-    needs: version-check
-    runs-on: ubuntu-latest
-    if: github.event.pull_request.merged == true && needs.version-check.outputs.new_tag_created == 'true'
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # Fetch full history for release notes
-      
       - name: Setup Bun
         uses: oven-sh/setup-bun@v1
         with:
@@ -86,219 +87,61 @@ jobs:
       - name: Install dependencies
         run: bun install
       
-      - name: Verify project structure
+      - name: Verify CLI
         run: |
-          echo "📁 Project structure:"
-          find . -type f -name "*.mjs" | head -20
-          echo ""
-          echo "📦 Dependencies:"
-          bun pm ls || true
-      
-      - name: Test CLI functionality
-        run: |
-          echo "🧪 Testing QK CLI..."
           bun cli.mjs --version
           bun cli.mjs --help
-          
-          # Test commands
-          echo "Testing hello-world command:"
-          bun cli.mjs hello-world || true
-          
-          echo "Testing release command:"
-          bun cli.mjs release --help || true
-      
-      - name: Validate version consistency
-        run: |
-          echo "🔍 Validating version consistency..."
-          
-          # Get version from package.json
-          PKG_VERSION=$(node -e "console.log(JSON.parse(require('fs').readFileSync('package.json', 'utf8')).version)")
-          echo "Package version: $PKG_VERSION"
-          
-          # Get version from version-check job
-          TAG_VERSION="${{ needs.version-check.outputs.version }}"
-          echo "Tag version: $TAG_VERSION"
-          
-          # Normalize versions for comparison
-          PKG_NORMALIZED="v$PKG_VERSION"
-          TAG_NORMALIZED="v$TAG_VERSION"
-          
-          if [ "$PKG_NORMALIZED" != "$TAG_NORMALIZED" ]; then
-            echo "❌ Version mismatch: package.json ($PKG_NORMALIZED) != tag ($TAG_NORMALIZED)"
-            exit 1
-          else
-            echo "✅ Version consistency verified"
-          fi
-
-  # Create GitHub Release
-  create-release:
-    name: Create GitHub Release
-    needs: [version-check, build-and-test]
-    runs-on: ubuntu-latest
-    if: github.event.pull_request.merged == true && needs.version-check.outputs.new_tag_created == 'true'
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # Fetch full history for changelog
-      
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v1
-        with:
-          bun-version: latest
-      
-      - name: Install dependencies
-        run: bun install
-      
-      - name: Extract version and metadata
-        id: metadata
-        run: |
-          # Get version from version-check job
-          VERSION="v${{ needs.version-check.outputs.version }}"
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          
-          # Extract version components
-          if [[ "$VERSION" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)(-.+)?$ ]]; then
-            MAJOR=${BASH_REMATCH[1]}
-            MINOR=${BASH_REMATCH[2]}
-            PATCH=${BASH_REMATCH[3]}
-            PRERELEASE=${BASH_REMATCH[4]:-}
-            
-            echo "major=$MAJOR" >> $GITHUB_OUTPUT
-            echo "minor=$MINOR" >> $GITHUB_OUTPUT
-            echo "patch=$PATCH" >> $GITHUB_OUTPUT
-            echo "prerelease=$PRERELEASE" >> $GITHUB_OUTPUT
-            
-            # Determine if this is a prerelease
-            if [ -n "$PRERELEASE" ]; then
-              echo "is_prerelease=true" >> $GITHUB_OUTPUT
-            else
-              echo "is_prerelease=false" >> $GITHUB_OUTPUT
-            fi
-          fi
-          
-          echo "📋 Release metadata:"
-          echo "Version: $VERSION"
-          echo "Major: $MAJOR"
-          echo "Minor: $MINOR"
-          echo "Patch: $PATCH"
-          echo "Prerelease: $PRERELEASE"
       
       - name: Generate changelog
         id: changelog
         run: |
-          # Get previous tag for changelog
           PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
           
           if [ -n "$PREVIOUS_TAG" ]; then
-            echo "📝 Generating changelog from $PREVIOUS_TAG to ${{ steps.metadata.outputs.version }}"
             CHANGELOG=$(git log --pretty=format:"- %s (%h)" ${PREVIOUS_TAG}..HEAD)
           else
-            echo "📝 No previous tag found, generating changelog from first commit"
             CHANGELOG=$(git log --pretty=format:"- %s (%h)")
           fi
           
-          # Create release notes
-          RELEASE_NOTES="## QK CLI ${{ steps.metadata.outputs.version }}
-          
-          ### 📦 Installation
-          
-          \`\`\`bash
-          # Install via npm
-          npm install -g qk
-          
-          # Or clone and build
-          git clone https://github.com/choufeng/qk.git
-          cd qk
-          bun install
-          bun build cli.mjs --outfile qk --target node
-          \`\`\`
-          
-          ### 📋 Changes
-          
-          $CHANGELOG
-          
-          ### 🚀 Features
-          
-          - Modular command system with auto-discovery
-          - AI-powered chat integration
-          - Release management with automated versioning
-          - Built with Bun, ZX, and Commander.js
-          
-          ---
-          
-          *This release was automatically generated on $(date -u +"%Y-%m-%d %H:%M:%S UTC")*
-          "
-          
-          # Save changelog to file
-          echo "$RELEASE_NOTES" > CHANGELOG.md
-          
-          # Set output for GitHub step
-          {
-            echo "changelog<<EOF"
-            echo "$RELEASE_NOTES"
-            echo "EOF"
-          } >> $GITHUB_OUTPUT
-          
-          echo "📄 Changelog generated successfully"
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGELOG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
       
-      - name: Create Release
-        id: create_release
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.metadata.outputs.version }}
-          name: QK CLI ${{ steps.metadata.outputs.version }}
-          body: ${{ steps.changelog.outputs.changelog }}
+          tag_name: ${{ github.ref_name }}
+          name: QK CLI ${{ github.ref_name }}
+          body: |
+            ## QK CLI ${{ github.ref_name }}
+            
+            ### 📦 Installation
+            
+            ```bash
+            # Install via Homebrew
+            brew tap choufeng/qk && brew install qk
+            
+            # Or clone and build
+            git clone https://github.com/choufeng/qk.git
+            cd qk
+            bun install
+            ```
+            
+            ### 📋 Changes
+            
+            ${{ steps.changelog.outputs.changelog }}
+            
+            ---
+            
+            *Released on $(date -u +"%Y-%m-%d %H:%M:%S UTC")*
           draft: false
-          prerelease: ${{ steps.metadata.outputs.is_prerelease }}
+          prerelease: ${{ contains(github.ref_name, '-') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       
-      - name: Upload Release Assets (Manual)
+      - name: Notify completion
         run: |
-          echo "📦 GitHub automatically generates source archives:"
-          echo "• https://github.com/choufeng/qk/archive/refs/tags/${{ steps.metadata.outputs.version }}.tar.gz"
-          echo "• https://github.com/choufeng/qk/archive/refs/tags/${{ steps.metadata.outputs.version }}.zip"
-          echo ""
-          echo "✅ Release created successfully!"
-          echo "🔗 Release URL: ${{ steps.create_release.outputs.html_url }}"
-      
-      - name: Update package.json (if needed)
-        if: steps.metadata.outputs.prerelease == ''
-        run: |
-          echo "🔄 Updating package.json for stable release..."
-          # This could be used to trigger npm publish in the future
-          echo "Package version: ${{ steps.metadata.outputs.version }}"
-          echo "Ready for npm publish (manual step)"
-
-  # Notify completion
-  notify:
-    name: Notify Release Completion
-    needs: [version-check, build-and-test, create-release]
-    runs-on: ubuntu-latest
-    if: always()
-    
-    steps:
-      - name: Release Status
-        run: |
-          echo "🚀 QK CLI Release Status"
-          echo "=========================="
-          echo "Version: v${{ needs.version-check.outputs.version }}"
-          echo "New Tag Created: ${{ needs.version-check.outputs.new_tag_created }}"
-          echo "Repository: ${{ github.repository }}"
-          echo "Workflow: ${{ github.workflow }}"
-          echo "Run ID: ${{ github.run_id }}"
-          echo ""
-          echo "Version Check Status: ${{ needs.version-check.outputs.new_tag_created }}"
-          echo "Build Status: ${{ needs.build-and-test.result }}"
-          echo "Release Status: ${{ needs.create-release.result }}"
-          echo ""
-          if [ "${{ needs.create-release.result }}" == "success" ]; then
-            echo "✅ Release completed successfully!"
-            echo "📦 Archives available at:"
-            echo "• https://github.com/choufeng/qk/archive/refs/tags/v${{ needs.version-check.outputs.version }}.tar.gz"
-            echo "• https://github.com/choufeng/qk/archive/refs/tags/v${{ needs.version-check.outputs.version }}.zip"
-          else
-            echo "❌ Release failed or was skipped"
-          fi
+          echo "✅ Release ${{ github.ref_name }} created successfully!"
+          echo "📦 Archives:"
+          echo "  • https://github.com/${{ github.repository }}/archive/refs/tags/${{ github.ref_name }}.tar.gz"
+          echo "  • https://github.com/${{ github.repository }}/archive/refs/tags/${{ github.ref_name }}.zip"
