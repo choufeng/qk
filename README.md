@@ -66,3 +66,18 @@ qk pack-watch --kill
 # Chat with AI
 qk chat "Your question or prompt"
 ```
+
+## Automatic Versioning
+
+When a PR is merged to main/master, the version is automatically bumped based on commit messages:
+
+- `feat:` or `feature:` → minor version (1.9.1 → 1.10.0)
+- `fix:` or `bugfix:` → patch version (1.9.1 → 1.9.2)
+- `break:` or `!:` → major version (1.9.1 → 2.0.0)
+
+The release workflow will:
+1. Parse PR title and commits
+2. Bump version in package.json
+3. Create and push a git tag
+4. Generate GitHub Release with changelog
+5. GitHub automatically creates source archives (.tar.gz, .zip)
