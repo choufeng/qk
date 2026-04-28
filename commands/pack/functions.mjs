@@ -770,9 +770,11 @@ export async function executeAppItem(item, dependencyOutputs) {
 /**
  * 执行链式打包
  * @param {Object[]} items - 配置项数组
+ * @param {Object} options - 选项对象
+ * @param {Function} options.onPackageComplete - 包执行完成后的回调
  * @returns {Promise<void>}
  */
-export async function executeChain(items) {
+export async function executeChain(items, options = {}) {
   // 验证依赖
   validateDependencies(items);
 
@@ -789,25 +791,34 @@ export async function executeChain(items) {
   });
   console.log('');
 
-  // 依次执行
-  // dependencyOutputs 存储格式: { name: { tarballPath, packageName } }
   const dependencyOutputs = {};
+  let lastError = null;
 
   for (const item of sortedItems) {
     console.log(`\n▶️  Executing: ${item.name}`);
 
     try {
       if (item.type === 'package') {
-        // executePackageItem 返回 { tarballPath, packageName }
         const result = await executePackageItem(item, dependencyOutputs);
         dependencyOutputs[item.name] = result;
+
+        if (options.onPackageComplete) {
+          await options.onPackageComplete(item);
+        }
       } else {
         await executeAppItem(item, dependencyOutputs);
       }
     } catch (error) {
       console.error(`\n❌ Failed to execute "${item.name}": ${error.message}`);
-      throw error;
+      lastError = error;
+      if (item.type === 'package' && options.onPackageComplete) {
+        await options.onPackageComplete(item);
+      }
     }
+  }
+
+  if (lastError) {
+    throw lastError;
   }
 
   console.log('\n✅ Chain execution completed successfully!');
