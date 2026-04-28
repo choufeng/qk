@@ -3,6 +3,53 @@
 import { loadConfig, executeChain, getAvailableConfigs } from './functions.mjs';
 import { processManager } from '../../lib/process-manager.mjs';
 import { select } from '@inquirer/prompts';
+import { $ } from 'zx';
+
+async function promptBranchSwitch(item) {
+  try {
+    const branchOutput = await $`git for-each-ref refs/heads/ --sort=-committerdate --format=%(refname:short)|%(subject)`.text();
+    const currentBranch = (await $`git branch --show-current`.text()).trim();
+
+    const branches = branchOutput
+      .split('\n')
+      .map(line => {
+        const [name, ...subjectParts] = line.split('|');
+        return { name: name.trim(), subject: subjectParts.join('|').trim() };
+      })
+      .filter(b => b.name && b.name !== currentBranch);
+
+    const choices = [
+      { name: '(skip - stay on current branch)', value: null },
+      ...branches.map(b => ({
+        name: `${b.name}  ${b.subject ? `— ${b.subject}` : ''}`,
+        value: b.name
+      }))
+    ];
+
+    const selected = await select({
+      message: `[${item.name}] Switch branch before next step?`,
+      choices
+    });
+
+    if (!selected) return;
+
+    const statusOutput = await $`git status --porcelain`.text();
+    if (statusOutput.trim()) {
+      throw new Error(
+        'Working tree is dirty. Please commit or stash your changes before switching branches.'
+      );
+    }
+
+    await $`git checkout ${selected}`;
+    console.log(`🌿 Switched to branch: ${selected}`);
+  } catch (error) {
+    if (error.name === 'ExitPromptError' || error.message?.includes('User force closed')) {
+      console.log('\nPrompt cancelled.');
+      process.exit(0);
+    }
+    throw error;
+  }
+}
 
 /**
  * @description Chain-build packages and apps based on dependency order
@@ -10,6 +57,8 @@ import { select } from '@inquirer/prompts';
 export async function run(args) {
   // 注册进程管理器的清理处理器
   processManager.registerCleanupHandlers();
+
+  const checkBranch = process.argv.includes('--c');
 
   // 扁平化参数并过滤有效参数
   const flatArgs = args.flat();
@@ -67,7 +116,9 @@ export async function run(args) {
     processManager.startSession(configName);
 
     // 执行链式打包
-    await executeChain(items);
+    await executeChain(items, {
+      onPackageComplete: checkBranch ? promptBranchSwitch : undefined
+    });
 
     // 正常完成时也清理一下
     if (processManager.getActiveProcessCount() > 0) {
