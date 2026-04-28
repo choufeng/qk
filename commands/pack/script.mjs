@@ -19,7 +19,8 @@ async function promptBranchSwitch(item) {
       const [name, ...subjectParts] = line.split('|');
       return { name: name.trim(), subject: subjectParts.join('|').trim() };
     })
-    .filter(b => b.name && b.name !== currentBranch);
+    .filter(b => b.name && b.name !== currentBranch)
+    .slice(0, 10);
 
   const options = [
     { label: '(skip - stay on current branch)', value: null },
