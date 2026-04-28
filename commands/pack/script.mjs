@@ -37,8 +37,36 @@ async function promptBranchSwitch(item) {
 
     if (!selected) return;
 
-    await git`git checkout ${selected}`;
-    console.log(`🌿 Switched to branch: ${selected}`);
+    try {
+      await git`git checkout ${selected}`;
+      console.log(`🌿 Switched to branch: ${selected}`);
+    } catch (checkoutError) {
+      const isDirtyConflict = checkoutError.message?.includes('local changes') ||
+        checkoutError.message?.includes('overwritten by checkout') ||
+        checkoutError.message?.includes('Please commit');
+
+      if (!isDirtyConflict) throw checkoutError;
+
+      console.log(`\n⚠️  Branch switch failed due to local changes.`);
+      const recovery = await select({
+        message: 'What would you like to do?',
+        choices: [
+          { name: 'Stash changes and switch', value: 'stash' },
+          { name: 'Skip (stay on current branch)', value: 'skip' },
+        ]
+      });
+
+      if (recovery === 'skip') return;
+
+      await git`git stash --include-untracked`;
+      await git`git checkout ${selected}`;
+      console.log(`🌿 Switched to branch: ${selected}`);
+      try {
+        await git`git stash pop`;
+      } catch {
+        console.log(`⚠️  Stash pop had conflicts — resolve manually with: git stash pop`);
+      }
+    }
   } catch (error) {
     if (error.name === 'ExitPromptError' || error.message?.includes('User force closed')) {
       console.log('\nPrompt cancelled.');
