@@ -7,7 +7,8 @@ import { $ } from 'zx';
 
 async function promptBranchSwitch(item) {
   try {
-    const branchOutput = await $`git for-each-ref refs/heads/ --sort=-committerdate --format=%(refname:short)|%(subject)`.text();
+    const fmt = '%(refname:short)|%(subject)';
+    const branchOutput = await $`git for-each-ref refs/heads/ --sort=-committerdate ${'--format=' + fmt}`.text();
     const currentBranch = (await $`git branch --show-current`.text()).trim();
 
     const statusOutput = await $`git status --porcelain`.text();
