@@ -48,7 +48,7 @@ else if (
 else if (
   allTexts.match(/\bfix\b/) ||
   allTexts.match(/\bbugfix\b/) ||
-  allTexts.match(/\bbug fix\b/)
+  allTexts.includes('bug fix')
 ) {
   level = 'patch';
 }
