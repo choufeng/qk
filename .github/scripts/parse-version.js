@@ -8,20 +8,13 @@
 // 从环境变量读取 PR 信息
 const prTitle = process.env.PR_TITLE || '';
 const prBody = process.env.PR_BODY || '';
-const commitsJson = process.env.COMMITS || '[]';
-
-let commits = [];
-try {
-  commits = JSON.parse(commitsJson);
-} catch (e) {
-  console.error('Failed to parse commits JSON:', e.message);
-}
+const commitMessages = process.env.COMMIT_MESSAGES || '';
 
 // 合并所有文本用于分析
 const allTexts = [
   prTitle,
   prBody,
-  ...commits.map(c => c.message || c.title || '')
+  commitMessages
 ].join('\n').toLowerCase();
 
 // 默认版本级别

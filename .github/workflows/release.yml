@@ -16,7 +16,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release
   cancel-in-progress: false
 
 jobs:
@@ -34,6 +34,16 @@ jobs:
         with:
           fetch-depth: 0
       
+      - name: Get commits
+        id: commits
+        run: |
+          COMMIT_MSGS=$(gh pr view ${{ github.event.pull_request.number }} --json commits -q '.commits[].commit.message')
+          echo "commit_messages<<EOF" >> $GITHUB_OUTPUT
+          echo "$COMMIT_MSGS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Parse commits and determine version level
         id: parse
         run: |
@@ -43,7 +53,7 @@ jobs:
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_BODY: ${{ github.event.pull_request.body }}
-          COMMITS: ${{ toJSON(github.event.pull_request.commits) }}
+          COMMIT_MESSAGES: ${{ steps.commits.outputs.commit_messages }}
       
       - name: Bump version
         id: bump
@@ -58,6 +68,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add package.json
           git commit -m "chore: release v${{ steps.bump.outputs.new_version }} [release]"
+          git pull --rebase origin ${{ github.event.pull_request.base.ref }}
           git push origin ${{ github.event.pull_request.base.ref }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
