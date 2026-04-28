@@ -2,86 +2,72 @@
 
 import { loadConfig, executeChain, getAvailableConfigs, resolvePath } from './functions.mjs';
 import { processManager } from '../../lib/process-manager.mjs';
-import { search, select } from '@inquirer/prompts';
+import * as p from '@clack/prompts';
 import { $ } from 'zx';
 
 async function promptBranchSwitch(item) {
+  const dir = resolvePath(item.dir);
+  const git = $({ cwd: dir });
+
+  const fmt = '%(refname:short)|%(subject)';
+  const branchOutput = await git`git for-each-ref refs/heads/ --sort=-committerdate ${'--format=' + fmt}`.text();
+  const currentBranch = (await git`git branch --show-current`.text()).trim();
+
+  const branches = branchOutput
+    .split('\n')
+    .map(line => {
+      const [name, ...subjectParts] = line.split('|');
+      return { name: name.trim(), subject: subjectParts.join('|').trim() };
+    })
+    .filter(b => b.name && b.name !== currentBranch);
+
+  const options = [
+    { label: '(skip - stay on current branch)', value: null },
+    ...branches.map(b => ({
+      label: b.name,
+      hint: b.subject || undefined,
+      value: b.name,
+    }))
+  ];
+
+  const selected = await p.select({
+    message: `[${item.name}] Switch branch before next step?`,
+    options,
+  });
+  if (p.isCancel(selected)) { p.cancel('Cancelled.'); process.exit(0); }
+  if (!selected) return;
+
   try {
-    const dir = resolvePath(item.dir);
-    const git = $({ cwd: dir });
+    await git`git checkout ${selected}`;
+    p.log.success(`Switched to branch: ${selected}`);
+  } catch (checkoutError) {
+    const isDirtyConflict = checkoutError.message?.includes('local changes') ||
+      checkoutError.message?.includes('overwritten by checkout') ||
+      checkoutError.message?.includes('Please commit');
 
-    const fmt = '%(refname:short)|%(subject)';
-    const branchOutput = await git`git for-each-ref refs/heads/ --sort=-committerdate ${'--format=' + fmt}`.text();
-    const currentBranch = (await git`git branch --show-current`.text()).trim();
+    if (!isDirtyConflict) throw checkoutError;
 
-    const branches = branchOutput
-      .split('\n')
-      .map(line => {
-        const [name, ...subjectParts] = line.split('|');
-        return { name: name.trim(), subject: subjectParts.join('|').trim() };
-      })
-      .filter(b => b.name && b.name !== currentBranch);
-
-    const allChoices = [
-      { name: '(skip - stay on current branch)', value: null },
-      ...branches.map(b => ({
-        name: `${b.name}  ${b.subject ? `— ${b.subject}` : ''}`,
-        value: b.name
-      }))
-    ];
-
-    const selected = await search({
-      message: `[${item.name}] Switch branch before next step?`,
-      source: (input) => {
-        if (!input) return allChoices;
-        const q = input.toLowerCase();
-        return allChoices.filter(c =>
-          c.value === null || c.name.toLowerCase().includes(q)
-        );
-      }
+    p.log.warn('Branch switch failed due to local changes.');
+    const recovery = await p.select({
+      message: 'What would you like to do?',
+      options: [
+        { value: 'stash', label: 'Stash changes and switch' },
+        { value: 'skip',  label: 'Skip (stay on current branch)' },
+      ],
     });
+    if (p.isCancel(recovery) || recovery === 'skip') return;
 
-    if (!selected) return;
-
+    await git`git stash --include-untracked`;
+    await git`git checkout ${selected}`;
+    p.log.success(`Switched to branch: ${selected}`);
     try {
-      await git`git checkout ${selected}`;
-      console.log(`🌿 Switched to branch: ${selected}`);
-    } catch (checkoutError) {
-      const isDirtyConflict = checkoutError.message?.includes('local changes') ||
-        checkoutError.message?.includes('overwritten by checkout') ||
-        checkoutError.message?.includes('Please commit');
-
-      if (!isDirtyConflict) throw checkoutError;
-
-      console.log(`\n⚠️  Branch switch failed due to local changes.`);
-      const recovery = await select({
-        message: 'What would you like to do?',
-        choices: [
-          { name: 'Stash changes and switch', value: 'stash' },
-          { name: 'Skip (stay on current branch)', value: 'skip' },
-        ]
-      });
-
-      if (recovery === 'skip') return;
-
-      await git`git stash --include-untracked`;
-      await git`git checkout ${selected}`;
-      console.log(`🌿 Switched to branch: ${selected}`);
-      try {
-        await git`git stash pop`;
-      } catch {
-        throw new Error(
-          `Stash pop has conflicts on branch "${selected}". ` +
-          `Resolve conflicts manually (git stash pop), then re-run qk pack.`
-        );
-      }
+      await git`git stash pop`;
+    } catch {
+      throw new Error(
+        `Stash pop has conflicts on branch "${selected}". ` +
+        `Resolve conflicts manually (git stash pop), then re-run qk pack.`
+      );
     }
-  } catch (error) {
-    if (error.name === 'ExitPromptError' || error.message?.includes('User force closed')) {
-      console.log('\nPrompt cancelled.');
-      process.exit(0);
-    }
-    throw error;
   }
 }
 
@@ -89,12 +75,12 @@ async function promptBranchSwitch(item) {
  * @description Chain-build packages and apps based on dependency order
  */
 export async function run(args) {
-  // 注册进程管理器的清理处理器
+  p.intro('QK · PACK');
+
   processManager.registerCleanupHandlers();
 
   const checkBranch = process.argv.includes('--c');
 
-  // 扁平化参数并过滤有效参数
   const flatArgs = args.flat();
   const validArgs = flatArgs.filter(arg =>
     typeof arg === 'string' &&
@@ -102,81 +88,57 @@ export async function run(args) {
     !arg.startsWith('{')
   );
 
-  // 检查参数
   let configName;
 
   if (validArgs.length === 0) {
     const availableConfigs = await getAvailableConfigs();
-    
+
     if (availableConfigs.length === 0) {
-      console.error('❌ Please provide a configuration name or ensure ~/.config/qk/ has valid configurations');
-      console.log('');
-      console.log('Usage: qk pack <config-name>');
-      console.log('');
-      console.log('Examples:');
-      console.log('  qk pack example    # Use ~/.config/qk/pack-example.json');
-      console.log('  qk pack my-config  # Use ~/.config/qk/pack-my-config.json');
+      p.cancel(
+        'No configurations found.\n' +
+        'Usage: qk pack <config-name>\n' +
+        'Example: qk pack example  →  ~/.config/qk/pack-example.json'
+      );
       process.exit(1);
     }
 
-    try {
-      configName = await select({
-        message: 'Select a configuration to pack:',
-        choices: availableConfigs.map(name => ({ name, value: name }))
-      });
-    } catch (error) {
-      // User cancelled the prompt (e.g., via Ctrl+C)
-      if (error.name === 'ExitPromptError' || error.message?.includes('User force closed')) {
-        console.log('\nPrompt cancelled.');
-        process.exit(0);
-      }
-      throw error;
-    }
+    configName = await p.select({
+      message: 'Select a configuration to pack:',
+      options: availableConfigs.map(name => ({ label: name, value: name })),
+    });
+    if (p.isCancel(configName)) { p.cancel('Cancelled.'); process.exit(0); }
   } else {
     configName = validArgs[0];
   }
 
-  console.log('🚀 Starting pack chain execution');
-  console.log(`📄 Configuration: pack-${configName}.json`);
-  console.log('');
-
   try {
-    // 加载配置
     const items = await loadConfig(configName);
-    console.log(`📦 Loaded ${items.length} items`);
-    console.log('');
+    p.log.info(`Configuration: pack-${configName}.json  (${items.length} items)`);
 
-    // 启动会话（创建持久化文件）
     processManager.startSession(configName);
 
-    // 执行链式打包
     await executeChain(items, {
       onPackageComplete: checkBranch ? promptBranchSwitch : undefined
     });
 
-    // 正常完成时也清理一下
     if (processManager.getActiveProcessCount() > 0) {
-      console.log('🧹 Final cleanup of remaining processes...');
+      p.log.step('Final cleanup of remaining processes...');
       processManager.cleanup();
     }
   } catch (error) {
-    console.error('');
-    console.error(`❌ Error: ${error.message}`);
+    p.cancel(`Error: ${error.message}`);
 
-    // 错误时清理进程
     if (processManager.getActiveProcessCount() > 0) {
-      console.log('🧹 Cleaning up processes due to error...');
+      p.log.step('Cleaning up processes...');
       processManager.cleanup();
     }
 
-    // 结束会话（标记结束时间）
     processManager.endSession();
-
     process.exit(1);
   }
 
-  // 结束会话（标记结束时间）
   processManager.endSession();
+  p.outro('Pack chain complete.');
 }
 
 export default run;

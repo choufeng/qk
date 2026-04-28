@@ -1,6 +1,6 @@
 {
   "name": "qk",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "description": "QK CLI - A powerful command-line tool built with ZX and Commander.js",
   "type": "module",
   "main": "cli.mjs",
@@ -22,7 +22,7 @@
   "license": "MIT",
   "dependencies": {
     "@anthropic-ai/vertex-sdk": "^0.14.4",
-    "@inquirer/prompts": "^8.3.0",
+    "@clack/prompts": "^1.2.0",
     "@langchain/anthropic": "^1.3.23",
     "@langchain/core": "^1.1.32",
     "@langchain/google-vertexai": "^2.1.25",

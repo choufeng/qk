@@ -4,7 +4,7 @@ import { readFileSync, writeFileSync, unlinkSync } from 'fs'
 import { spawnSync } from 'child_process'
 import { $ } from 'zx'
 import chalk from 'chalk'
-import { confirm, select, checkbox } from '@inquirer/prompts'
+import * as p from '@clack/prompts'
 import { launch } from '../../lib/ai/index.mjs'
 import { ConfigManager } from '../../lib/config/index.mjs'
 import {
@@ -26,30 +26,6 @@ $.verbose = false
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const PROMPTS_DIR = join(__dirname, '../../configs/prompts')
-
-/**
- * Start a terminal spinner, returns the interval handle
- * @param {string} message
- * @returns {NodeJS.Timeout}
- */
-function startSpinner(message) {
-  const frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
-  let i = 0
-  process.stdout.write(`${frames[i]} ${message}`)
-  return setInterval(() => {
-    i = (i + 1) % frames.length
-    process.stdout.write(`\r${frames[i]} ${message}`)
-  }, 80)
-}
-
-/**
- * Stop the spinner and clear the line
- * @param {NodeJS.Timeout} handle
- */
-function stopSpinner(handle) {
-  clearInterval(handle)
-  process.stdout.write('\r\x1b[K') // clear line
-}
 
 /**
  * Check if package version was upgraded in current branch
@@ -102,10 +78,12 @@ export async function run(args) {
   const noVerify = flatArgs.includes('--no-verify') || flatArgs.includes('-nv')
   const noEdit = flatArgs.includes('--no-edit')
 
+  p.intro(chalk.bgCyan.black(' QK · GPR '))
+
   try {
     // 1. Validate git repo
     if (!(await isGitRepo())) {
-      console.error('Error: not a git repository.')
+      p.cancel('Not a git repository.')
       process.exit(1)
     }
 
@@ -114,17 +92,19 @@ export async function run(args) {
     const mainBranch = await getMainBranch()
 
     if (currentBranch === mainBranch) {
-      console.error(`Error: currently on main branch '${mainBranch}'. Switch to a feature branch first.`)
+      p.cancel(`Currently on main branch '${mainBranch}'. Switch to a feature branch first.`)
       process.exit(1)
     }
 
     // 3. Get branch data
-    console.log(chalk.cyan(`Analyzing branch '${currentBranch}'...`))
+    const analyzeSpinner = p.spinner()
+    analyzeSpinner.start(`Analyzing branch '${currentBranch}'...`)
     const commits = await getBranchCommits()
     const diff = await getBranchDiff()
+    analyzeSpinner.stop(`Branch '${currentBranch}' analyzed`)
 
     if (commits.length === 0 && !diff.trim()) {
-      console.log(chalk.yellow('No changes found vs main branch. Nothing to PR.'))
+      p.cancel('No changes found vs main branch. Nothing to PR.')
       process.exit(0)
     }
 
@@ -164,19 +144,16 @@ export async function run(args) {
       .replace(/\{\{QA_SECTION\}\}/g, qaSection)
 
     // 9. Push branch first (needed to check if PR exists)
-    let shouldPush = !(await remoteBranchExists(currentBranch))
-    if (!shouldPush) {
-      console.log(chalk.yellow('Branch already exists on remote, ensuring up-to-date...'))
-    } else {
-      console.log(chalk.cyan('Pushing branch to remote...'))
-    }
-
+    const shouldPush = !(await remoteBranchExists(currentBranch))
+    const pushSpinner = p.spinner()
+    pushSpinner.start(shouldPush ? 'Pushing branch to remote...' : 'Ensuring branch is up-to-date...')
     const pushed = await pushBranch()
     if (!pushed) {
-      console.error(chalk.red('Failed to push branch.'))
+      pushSpinner.stop('Failed to push branch.', 1)
+      p.cancel('Push failed. Check your remote connection.')
       process.exit(1)
     }
-    console.log(shouldPush ? chalk.green('Branch pushed.') : chalk.green('Branch updated.'))
+    pushSpinner.stop(shouldPush ? 'Branch pushed.' : 'Branch updated.')
 
     // 10. Check if PR already exists
     let prUrl = null
@@ -192,8 +169,8 @@ export async function run(args) {
     // 11. If PR exists, skip AI generation and just update the PR
     let prContent
     if (prExists) {
-      console.log(chalk.yellow('Pull Request already exists, skipping AI generation.'))
-      // Get existing PR info to reuse title and description
+      const fetchSpinner = p.spinner()
+      fetchSpinner.start('Pull Request already exists, fetching current content...')
       try {
         const prInfo = await $`gh pr view ${currentBranch} --json title,body --jq '.title, .body'`
         const [title, ...bodyLines] = prInfo.stdout.trim().split('\n')
@@ -201,17 +178,22 @@ export async function run(args) {
           title: title.trim(),
           description: bodyLines.join('\n').trim()
         }
+        fetchSpinner.stop('Existing PR content loaded.')
       } catch {
+        fetchSpinner.stop('Could not fetch PR content, using defaults.')
         prContent = { title: 'Update: codebase changes', description: '' }
       }
     } else {
       // 12. Call AI with spinner (only for new PR)
-      const spinner = startSpinner(chalk.cyan(`Generating PR content via ${provider}...`))
+      const aiSpinner = p.spinner()
+      aiSpinner.start(`Generating PR content via ${provider}...`)
       let response
       try {
         response = await launch(prompt, { temperature: 0.3 })
-      } finally {
-        stopSpinner(spinner)
+        aiSpinner.stop('PR content generated.')
+      } catch (err) {
+        aiSpinner.stop('AI generation failed.', 1)
+        throw err
       }
       prContent = parsePrContent(response.content)
     }
@@ -219,10 +201,12 @@ export async function run(args) {
     // 12.1 E2E tag selection (only for new PRs)
     const e2eTags = config.get('git.e2eTags') || []
     if (e2eTags.length > 0 && !prExists && autoPR !== true && !dryRun) {
-      const selectedTags = await checkbox({
+      const selectedTags = await p.multiselect({
         message: 'Select E2E tags for this PR (optional):',
-        choices: e2eTags.map(tag => ({ name: tag, value: tag })),
+        options: e2eTags.map(tag => ({ label: tag, value: tag })),
+        required: false,
       })
+      if (p.isCancel(selectedTags)) { p.cancel('Cancelled.'); process.exit(0) }
 
       if (selectedTags.length > 0) {
         const e2eLine = `[E2E: ${selectedTags.join(', ')}]`
@@ -249,10 +233,13 @@ export async function run(args) {
       const availableLabels = remoteLabels.filter(name => prLabels.includes(name))
 
       if (availableLabels.length > 0) {
-        selectedLabels = await checkbox({
+        const chosen = await p.multiselect({
           message: 'Select labels for this PR (optional):',
-          choices: availableLabels.map(tag => ({ name: tag, value: tag })),
+          options: availableLabels.map(tag => ({ label: tag, value: tag })),
+          required: false,
         })
+        if (p.isCancel(chosen)) { p.cancel('Cancelled.'); process.exit(0) }
+        selectedLabels = chosen
       }
     }
 
@@ -284,46 +271,44 @@ export async function run(args) {
     }
 
     // 11. Preview
-    console.log('\n' + chalk.gray('─').repeat(50))
-    console.log(chalk.bold.cyan('📋 PR Preview:'))
-    console.log(chalk.gray('─').repeat(50))
-    console.log(chalk.bold('Title:') + ' ' + chalk.green(prContent.title))
-    console.log(chalk.bold('\nDescription:'))
-    console.log(chalk.white(prContent.description))
-    console.log(chalk.gray('─').repeat(50))
+    const descPreview = prContent.description.length > 300
+      ? prContent.description.slice(0, 300) + '\n…'
+      : prContent.description
+    p.note(
+      `${chalk.bold('Title:')} ${chalk.green(prContent.title)}\n\n${chalk.bold('Description:')}\n${descPreview}`,
+      'PR Preview'
+    )
 
     if (dryRun) {
-      console.log(chalk.yellow('\n--dry-run: preview only, no PR created.'))
+      p.outro(chalk.yellow('--dry-run: preview only, no PR created.'))
       process.exit(0)
     }
 
     // 12. Check gh CLI
     if (!(await hasGhCli())) {
-      console.log(chalk.red('\nGitHub CLI (gh) not found. Install from https://cli.github.com/'))
-      console.log(chalk.gray(`Branch: ${currentBranch} → ${mainBranch}`))
+      p.cancel(`GitHub CLI (gh) not found. Install from https://cli.github.com/\nBranch: ${currentBranch} → ${mainBranch}`)
       process.exit(0)
     }
 
     // 12.5 Ask PR type (always ask for new PR)
     let isDraft = false
     if (!prExists) {
-      const prType = await select({
+      const prType = await p.select({
         message: 'Create a draft or ready PR?',
-        choices: [
-          { name: 'Draft PR', value: 'draft' },
-          { name: 'Ready PR', value: 'ready' },
+        options: [
+          { value: 'draft', label: 'Draft PR', hint: 'not ready for review' },
+          { value: 'ready', label: 'Ready PR', hint: 'open for review immediately' },
         ],
       })
-      
+      if (p.isCancel(prType)) { p.cancel('Cancelled.'); process.exit(0) }
       isDraft = prType === 'draft'
-      console.log(chalk.gray(`→ PR Type: ${isDraft ? 'Draft' : 'Ready'}`))
     }
 
     // 13. Confirm (skip if autoPR is true or PR already exists)
     if (autoPR !== true && !prExists) {
-      const ok = await confirm({ message: 'Create Pull Request?', default: true })
-      if (!ok) {
-        console.log(chalk.yellow('Cancelled.'))
+      const ok = await p.confirm({ message: 'Create Pull Request?', initialValue: true })
+      if (p.isCancel(ok) || !ok) {
+        p.cancel('Cancelled.')
         process.exit(0)
       }
     }
@@ -332,30 +317,27 @@ export async function run(args) {
     const bodyFile = `/tmp/qk-pr-body-${Date.now()}.md`
     writeFileSync(bodyFile, prContent.description, 'utf-8')
 
+    const actionSpinner = p.spinner()
     if (prExists) {
-      console.log(chalk.cyan('Updating existing Pull Request...'))
+      actionSpinner.start('Updating existing Pull Request...')
       await $`gh pr edit ${currentBranch} --title ${prContent.title} --body-file ${bodyFile}`
-      console.log(chalk.green('✓ Pull Request updated!'))
+      actionSpinner.stop('Pull Request updated.')
     } else {
-      console.log(chalk.cyan('Creating Pull Request...'))
+      actionSpinner.start('Creating Pull Request...')
       const labelArgs = selectedLabels.flatMap(l => ['--label', l])
       const createCmd = isDraft
         ? $`gh pr create --title ${prContent.title} --body-file ${bodyFile} --head ${currentBranch} --draft ${labelArgs}`
         : $`gh pr create --title ${prContent.title} --body-file ${bodyFile} --head ${currentBranch} ${labelArgs}`
       const result = await createCmd
       prUrl = result.stdout.trim()
-      console.log(chalk.green('✓ Pull Request created!'))
+      actionSpinner.stop('Pull Request created.')
     }
 
     try { unlinkSync(bodyFile) } catch {}
-    console.log(chalk.bold.blue(`🔗 PR URL: ${prUrl}`))
+    p.outro(`PR URL: ${chalk.cyan.underline(prUrl)}`)
 
   } catch (error) {
-    if (error.name === 'ExitPromptError') {
-      console.log(chalk.yellow('\nCancelled.'))
-      process.exit(0)
-    }
-    console.error(chalk.red(`Error: ${error.message}`))
+    p.cancel(`Error: ${error.message}`)
     process.exit(1)
   }
 }
