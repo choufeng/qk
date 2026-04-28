@@ -767,13 +767,6 @@ export async function executeAppItem(item, dependencyOutputs) {
 // Chain Execution
 // ============================================================================
 
-/**
- * 执行链式打包
- * @param {Object[]} items - 配置项数组
- * @param {Object} options - 选项对象
- * @param {Function} options.onPackageComplete - 包执行完成后的回调
- * @returns {Promise<void>}
- */
 export async function executeChain(items, options = {}) {
   // 验证依赖
   validateDependencies(items);
@@ -792,7 +785,6 @@ export async function executeChain(items, options = {}) {
   console.log('');
 
   const dependencyOutputs = {};
-  let lastError = null;
 
   for (const item of sortedItems) {
     console.log(`\n▶️  Executing: ${item.name}`);
@@ -810,15 +802,8 @@ export async function executeChain(items, options = {}) {
       }
     } catch (error) {
       console.error(`\n❌ Failed to execute "${item.name}": ${error.message}`);
-      lastError = error;
-      if (item.type === 'package' && options.onPackageComplete) {
-        await options.onPackageComplete(item);
-      }
+      throw error;
     }
-  }
-
-  if (lastError) {
-    throw lastError;
   }
 
   console.log('\n✅ Chain execution completed successfully!');
