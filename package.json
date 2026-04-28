@@ -1,6 +1,6 @@
 {
   "name": "qk",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "QK CLI - A powerful command-line tool built with ZX and Commander.js",
   "type": "module",
   "main": "cli.mjs",
