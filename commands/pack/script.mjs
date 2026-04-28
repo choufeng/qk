@@ -64,7 +64,10 @@ async function promptBranchSwitch(item) {
       try {
         await git`git stash pop`;
       } catch {
-        console.log(`⚠️  Stash pop had conflicts — resolve manually with: git stash pop`);
+        throw new Error(
+          `Stash pop has conflicts on branch "${selected}". ` +
+          `Resolve conflicts manually (git stash pop), then re-run qk pack.`
+        );
       }
     }
   } catch (error) {
