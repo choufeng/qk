@@ -767,6 +767,13 @@ export async function executeAppItem(item, dependencyOutputs) {
 // Chain Execution
 // ============================================================================
 
+/**
+ * 执行链式打包
+ * @param {Object[]} items - 配置项数组
+ * @param {Object} [options={}] - 选项
+ * @param {Function} [options.onPackageComplete] - 每个 package 打包成功后的回调
+ * @returns {Promise<void>}
+ */
 export async function executeChain(items, options = {}) {
   // 验证依赖
   validateDependencies(items);

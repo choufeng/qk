@@ -22,8 +22,8 @@ function makeItems() {
   writePkg(b, 'pkg-b', { 'pkg-a': '1.0.0' })
   writePkg(app, 'my-app', { 'pkg-b': '1.0.0' })
   return [
-    { name: 'pkg-a', type: 'package', dir: a, commands: ['touch fake.tgz'] },
-    { name: 'pkg-b', type: 'package', dir: b, commands: ['touch fake.tgz'], depends_on: 'pkg-a' },
+    { name: 'pkg-a', type: 'package', dir: a, commands: ['touch pkg-a-1.0.0-fake.tgz'] },
+    { name: 'pkg-b', type: 'package', dir: b, commands: ['touch pkg-b-1.0.0-fake.tgz'], depends_on: 'pkg-a' },
     { name: 'my-app', type: 'app', dir: app, commands: [] },
   ]
 }
