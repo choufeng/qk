@@ -37,13 +37,6 @@ async function promptBranchSwitch(item) {
 
     if (!selected) return;
 
-    const statusOutput = await git`git status --porcelain`.text();
-    if (statusOutput.trim()) {
-      throw new Error(
-        'Working tree is dirty. Please commit or stash your changes before switching branches.'
-      );
-    }
-
     await git`git checkout ${selected}`;
     console.log(`🌿 Switched to branch: ${selected}`);
   } catch (error) {
