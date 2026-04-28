@@ -14,13 +14,6 @@ async function promptBranchSwitch(item) {
     const branchOutput = await git`git for-each-ref refs/heads/ --sort=-committerdate ${'--format=' + fmt}`.text();
     const currentBranch = (await git`git branch --show-current`.text()).trim();
 
-    const statusOutput = await git`git status --porcelain`.text();
-    if (statusOutput.trim()) {
-      throw new Error(
-        'Working tree is dirty. Please commit or stash your changes before switching branches.'
-      );
-    }
-
     const branches = branchOutput
       .split('\n')
       .map(line => {
@@ -43,6 +36,13 @@ async function promptBranchSwitch(item) {
     });
 
     if (!selected) return;
+
+    const statusOutput = await git`git status --porcelain`.text();
+    if (statusOutput.trim()) {
+      throw new Error(
+        'Working tree is dirty. Please commit or stash your changes before switching branches.'
+      );
+    }
 
     await git`git checkout ${selected}`;
     console.log(`🌿 Switched to branch: ${selected}`);
