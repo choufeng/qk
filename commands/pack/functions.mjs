@@ -770,9 +770,11 @@ export async function executeAppItem(item, dependencyOutputs) {
 /**
  * 执行链式打包
  * @param {Object[]} items - 配置项数组
+ * @param {Object} [options={}] - 选项
+ * @param {Function} [options.onPackageComplete] - 每个 package 打包成功后的回调
  * @returns {Promise<void>}
  */
-export async function executeChain(items) {
+export async function executeChain(items, options = {}) {
   // 验证依赖
   validateDependencies(items);
 
@@ -789,8 +791,6 @@ export async function executeChain(items) {
   });
   console.log('');
 
-  // 依次执行
-  // dependencyOutputs 存储格式: { name: { tarballPath, packageName } }
   const dependencyOutputs = {};
 
   for (const item of sortedItems) {
@@ -798,9 +798,12 @@ export async function executeChain(items) {
 
     try {
       if (item.type === 'package') {
-        // executePackageItem 返回 { tarballPath, packageName }
         const result = await executePackageItem(item, dependencyOutputs);
         dependencyOutputs[item.name] = result;
+
+        if (options.onPackageComplete) {
+          await options.onPackageComplete(item);
+        }
       } else {
         await executeAppItem(item, dependencyOutputs);
       }
