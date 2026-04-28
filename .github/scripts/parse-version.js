@@ -44,4 +44,12 @@ else if (
 ) {
   level = 'minor';
 }
+// Patch: fix, bugfix, bug fix - 显式检测以符合规范
+else if (
+  allTexts.match(/\bfix\b/) ||
+  allTexts.match(/\bbugfix\b/) ||
+  allTexts.match(/\bbug fix\b/)
+) {
+  level = 'patch';
+}
 console.log(level);
