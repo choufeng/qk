@@ -2,7 +2,7 @@
 
 import { loadConfig, executeChain, getAvailableConfigs, resolvePath } from './functions.mjs';
 import { processManager } from '../../lib/process-manager.mjs';
-import { select } from '@inquirer/prompts';
+import { search, select } from '@inquirer/prompts';
 import { $ } from 'zx';
 
 async function promptBranchSwitch(item) {
@@ -22,7 +22,7 @@ async function promptBranchSwitch(item) {
       })
       .filter(b => b.name && b.name !== currentBranch);
 
-    const choices = [
+    const allChoices = [
       { name: '(skip - stay on current branch)', value: null },
       ...branches.map(b => ({
         name: `${b.name}  ${b.subject ? `— ${b.subject}` : ''}`,
@@ -30,9 +30,15 @@ async function promptBranchSwitch(item) {
       }))
     ];
 
-    const selected = await select({
+    const selected = await search({
       message: `[${item.name}] Switch branch before next step?`,
-      choices
+      source: (input) => {
+        if (!input) return allChoices;
+        const q = input.toLowerCase();
+        return allChoices.filter(c =>
+          c.value === null || c.name.toLowerCase().includes(q)
+        );
+      }
     });
 
     if (!selected) return;
