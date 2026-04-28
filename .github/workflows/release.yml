@@ -98,7 +98,7 @@ jobs:
       - name: Generate changelog
         id: changelog
         run: |
-          PREVIOUS_TAG=$(git tag --sort=-creatordate | head -1)
+          PREVIOUS_TAG=$(git tag --sort=-creatordate | head -2 | tail -1)
           
           if [ -n "$PREVIOUS_TAG" ]; then
             CHANGELOG=$(git log --pretty=format:"- %s (%h)" ${PREVIOUS_TAG}..HEAD)
