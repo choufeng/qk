@@ -20,6 +20,7 @@ export async function run(args) {
       options: [
         { value: 'ollama',  label: 'Ollama',      hint: 'local' },
         { value: 'vertex',  label: 'Vertex AI',   hint: 'Google Cloud' },
+        { value: 'litellm', label: 'LiteLLM',     hint: 'proxy' },
       ],
       initialValue: config.get('ai.provider'),
     })
@@ -57,6 +58,31 @@ export async function run(args) {
 
       config.set('ai.ollama.endpoint', endpoint)
       config.set('ai.ollama.model', model)
+    } else if (provider === 'litellm') {
+      const endpoint = await p.text({
+        message: 'LiteLLM proxy endpoint',
+        placeholder: PROVIDER_DEFAULTS.litellm.endpoint,
+        initialValue: config.get('ai.litellm.endpoint') || PROVIDER_DEFAULTS.litellm.endpoint,
+      })
+      if (p.isCancel(endpoint)) { p.cancel('Cancelled.'); process.exit(0) }
+
+      const apiKey = await p.password({
+        message: 'API key (leave blank if not required)',
+        placeholder: PROVIDER_DEFAULTS.litellm.apiKey,
+        initialValue: config.get('ai.litellm.apiKey') || '',
+      })
+      if (p.isCancel(apiKey)) { p.cancel('Cancelled.'); process.exit(0) }
+
+      const model = await p.text({
+        message: 'Model',
+        placeholder: PROVIDER_DEFAULTS.litellm.model,
+        initialValue: config.get('ai.litellm.model') || PROVIDER_DEFAULTS.litellm.model,
+      })
+      if (p.isCancel(model)) { p.cancel('Cancelled.'); process.exit(0) }
+
+      config.set('ai.litellm.endpoint', endpoint)
+      config.set('ai.litellm.apiKey', apiKey)
+      config.set('ai.litellm.model', model)
     } else {
       const model = await p.text({
         message: 'Vertex AI model',
@@ -73,7 +99,9 @@ export async function run(args) {
     const ai = config.get('ai')
     const summary = provider === 'ollama'
       ? `provider: ${ai.provider}\nlanguage: ${ai.language}\nendpoint: ${ai.ollama.endpoint}\nmodel:    ${ai.ollama.model}`
-      : `provider: ${ai.provider}\nlanguage: ${ai.language}\nmodel:    ${ai.vertex.model}`
+      : provider === 'litellm'
+        ? `provider: ${ai.provider}\nlanguage: ${ai.language}\nendpoint: ${ai.litellm.endpoint}\nmodel:    ${ai.litellm.model}`
+        : `provider: ${ai.provider}\nlanguage: ${ai.language}\nmodel:    ${ai.vertex.model}`
     p.note(summary, 'Configuration summary')
 
     const ok = await p.confirm({ message: 'Save configuration?', initialValue: true })
