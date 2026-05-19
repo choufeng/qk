@@ -37,12 +37,12 @@ export async function run(args) {
   p.intro(chalk.bgCyan.black(' QK · GC '))
 
   try {
-    // 0. Check for lazygit and config, open it if available
+    // 0. Check for gitui and config, open it if available
     const config = new ConfigManager()
-    const hasLazygit = commandExists('lazygit')
-    const useLazygit = config.get('git.useLazygit')
-    if (hasLazygit && useLazygit === true) {
-      spawnSync('lazygit', [], { stdio: 'inherit' })
+    const hasGitUI = commandExists('gitui')
+    const useGitUI = config.get('git.useGitUI')
+    if (hasGitUI && useGitUI === true) {
+      spawnSync('gitui', [], { stdio: 'inherit' })
     }
 
     // 1. Check staged changes
