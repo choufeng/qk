@@ -1,5 +1,6 @@
 #!/usr/bin/env bun
 
+import { spawnSync } from 'child_process'
 import { $ } from 'zx'
 import chalk from 'chalk'
 import * as p from '@clack/prompts'
@@ -62,7 +63,7 @@ async function isGitRepo() {
 }
 
 /**
- * @description Switch git branch interactively (JK / arrow keys to pick, Enter to switch)
+ * @description Switch git branch interactively (type to filter, arrow keys to pick, Enter to switch)
  */
 export async function run(args) {
   p.intro(chalk.bgCyan.black(' QK · CB '))
@@ -97,10 +98,11 @@ export async function run(args) {
     hint: recentSet.has(b) ? 'recent' : 'local',
   }))
 
-  const selected = await p.select({
+  const selected = await p.autocomplete({
     message: `Switch branch ${chalk.dim(`(current: ${current})`)}`,
     options,
     initialValue: merged[0],
+    placeholder: 'Type to filter…',
   })
 
   if (p.isCancel(selected)) {
@@ -109,12 +111,16 @@ export async function run(args) {
   }
 
   // 尝试切换；失败则展示 git 报错且不切换
-  try {
-    const res = await $`git checkout ${selected}`
+  // spawnSync + stdin ignore：避免外层 TTY / 残留输入污染 git 交互
+  const res = spawnSync('git', ['checkout', selected], {
+    stdio: ['ignore', 'pipe', 'pipe'],
+    encoding: 'utf-8',
+  })
+  if (res.status === 0) {
     p.outro(chalk.green(`✓ Switched to ${selected}`))
     if (res.stdout?.trim()) console.log(res.stdout.trim())
-  } catch (err) {
-    const msg = (err.stderr || err.stdout || err.message || '').trim()
+  } else {
+    const msg = (res.stderr || res.stdout || '').trim()
     p.note(msg || '(no details)', chalk.red(`Switch failed: ${selected}`))
     p.outro(chalk.red('Branch not switched.'))
     process.exit(1)
