@@ -20,7 +20,8 @@ export async function run(args) {
       options: [
         { value: 'ollama',  label: 'Ollama',      hint: 'local' },
         { value: 'vertex',  label: 'Vertex AI',   hint: 'Google Cloud' },
-        { value: 'litellm', label: 'LiteLLM',     hint: 'proxy' },
+        { value: 'litellm',  label: 'LiteLLM',     hint: 'proxy' },
+        { value: 'deepseek', label: 'DeepSeek',    hint: 'direct' },
       ],
       initialValue: config.get('ai.provider'),
     })
@@ -83,6 +84,31 @@ export async function run(args) {
       config.set('ai.litellm.endpoint', endpoint)
       config.set('ai.litellm.apiKey', apiKey)
       config.set('ai.litellm.model', model)
+    } else if (provider === 'deepseek') {
+      const apiKey = await p.password({
+        message: 'DeepSeek API key',
+        placeholder: 'sk-xxx',
+        initialValue: config.get('ai.deepseek.apiKey') || '',
+      })
+      if (p.isCancel(apiKey)) { p.cancel('Cancelled.'); process.exit(0) }
+
+      const model = await p.text({
+        message: 'Model',
+        placeholder: PROVIDER_DEFAULTS.deepseek.model,
+        initialValue: config.get('ai.deepseek.model') || PROVIDER_DEFAULTS.deepseek.model,
+      })
+      if (p.isCancel(model)) { p.cancel('Cancelled.'); process.exit(0) }
+
+      const endpoint = await p.text({
+        message: 'Endpoint (blank = official)',
+        placeholder: PROVIDER_DEFAULTS.deepseek.endpoint,
+        initialValue: config.get('ai.deepseek.endpoint') || PROVIDER_DEFAULTS.deepseek.endpoint,
+      })
+      if (p.isCancel(endpoint)) { p.cancel('Cancelled.'); process.exit(0) }
+
+      config.set('ai.deepseek.apiKey', apiKey)
+      config.set('ai.deepseek.model', model)
+      config.set('ai.deepseek.endpoint', endpoint)
     } else {
       const model = await p.text({
         message: 'Vertex AI model',
@@ -101,7 +127,9 @@ export async function run(args) {
       ? `provider: ${ai.provider}\nlanguage: ${ai.language}\nendpoint: ${ai.ollama.endpoint}\nmodel:    ${ai.ollama.model}`
       : provider === 'litellm'
         ? `provider: ${ai.provider}\nlanguage: ${ai.language}\nendpoint: ${ai.litellm.endpoint}\nmodel:    ${ai.litellm.model}`
-        : `provider: ${ai.provider}\nlanguage: ${ai.language}\nmodel:    ${ai.vertex.model}`
+        : provider === 'deepseek'
+          ? `provider: ${ai.provider}\nlanguage: ${ai.language}\nendpoint: ${ai.deepseek.endpoint}\nmodel:    ${ai.deepseek.model}`
+          : `provider: ${ai.provider}\nlanguage: ${ai.language}\nmodel:    ${ai.vertex.model}`
     p.note(summary, 'Configuration summary')
 
     const ok = await p.confirm({ message: 'Save configuration?', initialValue: true })
