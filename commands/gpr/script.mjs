@@ -72,8 +72,10 @@ async function checkVersionUpgrade() {
  * @description AI-powered Pull Request generator
  */
 export async function run(args) {
-  // Parse flags from args
+  // Parse flags from args; remaining positional arg = extra hint for the LLM
   const flatArgs = args.flat().filter(a => typeof a === 'string' && !a.includes('Command') && !a.startsWith('{'))
+  const flags = ['--dry-run', '-n', '--no-verify', '-nv', '--no-edit']
+  const hint = flatArgs.find(a => !flags.includes(a)) || ''
   const dryRun = flatArgs.includes('--dry-run') || flatArgs.includes('-n')
   const noVerify = flatArgs.includes('--no-verify') || flatArgs.includes('-nv')
   const noEdit = flatArgs.includes('--no-edit')
@@ -142,6 +144,7 @@ export async function run(args) {
       .replace(/\{\{COMMITS\}\}/g, commitSummary)
       .replace(/\{\{DIFF\}\}/g, diff || 'No diff available')
       .replace(/\{\{QA_SECTION\}\}/g, qaSection)
+      .replace(/\{\{EXTRA_HINT\}\}/g, hint)
 
     // 9. Push branch first (needed to check if PR exists)
     const shouldPush = !(await remoteBranchExists(currentBranch))
@@ -186,6 +189,7 @@ export async function run(args) {
     } else {
       // 12. Call AI with spinner (only for new PR)
       const aiSpinner = p.spinner()
+      if (hint) p.log.info(`Extra hint: ${chalk.cyan(hint)}`)
       aiSpinner.start(`Generating PR content via ${provider}...`)
       let response
       try {
