@@ -46,13 +46,13 @@ export async function run(args) {
     if (!target) {
       target = await detectMainBranch()
       if (!target) {
-        p.cancel('无法探测主分支（origin/HEAD、origin/main、origin/master、main、master 均不存在），请显式指定：qk rebase <branch>')
+        p.cancel('Cannot detect main branch (tried origin/HEAD, origin/main, origin/master, main, master). Specify one: qk rebase <branch>')
         process.exit(1)
       }
     }
 
     if (target === branch || target === `origin/${branch}`) {
-      p.cancel(`当前分支就是 ${branch}，无需 rebase。`)
+      p.cancel(`Already on ${branch}, nothing to rebase.`)
       process.exit(0)
     }
 
@@ -60,7 +60,7 @@ export async function run(args) {
     const spinner = p.spinner()
     spinner.start(`git fetch origin ${target}...`)
     await $`git fetch origin ${target}`.nothrow().quiet()
-    spinner.stop('fetch 完成')
+    spinner.stop('fetch done')
 
     // 优先 rebase 到远端追踪分支
     const remoteRef = `origin/${target}`
@@ -75,7 +75,7 @@ export async function run(args) {
     try {
       await $`git rev-parse --verify -q ${rebaseRef}`
     } catch {
-      p.cancel(`分支不存在: ${rebaseRef}`)
+      p.cancel(`Branch not found: ${rebaseRef}`)
       process.exit(1)
     }
 
@@ -85,20 +85,20 @@ export async function run(args) {
     const preview = await previewConflicts(rebaseRef)
 
     if (preview === null) {
-      p.log.warn('Git < 2.38 无 merge-tree，跳过预检，直接 rebase（自动处理仍兜底）')
+      p.log.warn('Git < 2.38, merge-tree unavailable. Skipping pre-check, rebasing directly (auto-handling still applies)')
     } else if (preview.length === 0) {
-      p.log.success('预检无冲突，直接 rebase')
+      p.log.success('Pre-check clean, rebasing directly')
     } else {
       const locks = preview.filter(isLockfile)
       const others = preview.filter((f) => !isLockfile(f))
       if (others.length === 0) {
-        p.log.info(`预检冲突 ${preview.length} 个文件，全部为锁文件 → 自动重装解决:`)
+        p.log.info(`Pre-check: ${preview.length} conflicted file(s), all lockfiles → auto-regenerate:`)
         p.note(locks.map((f) => `${chalk.yellow('↻')} ${f}`).join('\n'))
       } else {
-        p.log.warn(`预检有源码冲突，rebase 将停在冲突处交你解决:`)
+        p.log.warn(`Pre-check: source conflicts detected, rebase will stop for manual resolution:`)
         p.note(
           preview
-            .map((f) => `${isLockfile(f) ? chalk.yellow('↻ 锁文件（自动）') : chalk.red('✎ 源码（手动）')} ${f}`)
+            .map((f) => `${isLockfile(f) ? chalk.yellow('↻ lockfile (auto)') : chalk.red('✎ source (manual)')} ${f}`)
             .join('\n')
         )
       }
@@ -130,7 +130,7 @@ export async function run(args) {
           .split('\n')
           .filter(Boolean)
         if (after.some((f) => !isLockfile(f))) {
-          p.log.info('请解决剩余源码冲突后 git add + git rebase --continue（放弃: git rebase --abort）')
+          p.log.info('Resolve remaining source conflicts, then git add + git rebase --continue (abort: git rebase --abort)')
           return
         }
         continue
@@ -138,14 +138,14 @@ export async function run(args) {
 
       // 全锁文件冲突：删掉重装，重新生成
       for (const lock of conflicted) {
-        p.log.step(`${chalk.yellow('↻')} 重新生成 ${lock} (${LOCKFILES[lock]})`)
+        p.log.step(`${chalk.yellow('↻')} Regenerating ${lock} (${LOCKFILES[lock]})`)
         rmSync(lock, { force: true })
       }
       const installCmd = LOCKFILES[conflicted.find(isLockfile)]
       const res = await $`${installCmd.split(' ')}`.nothrow()
       if (res.exitCode !== 0) {
         await handOverToHuman(conflicted)
-        p.log.error('依赖安装失败，请手动处理后 git rebase --continue')
+        p.log.error('Install failed, resolve manually then git rebase --continue')
         return
       }
       await $`git add ${conflicted}`
@@ -153,9 +153,9 @@ export async function run(args) {
     }
 
     const newHead = (await $`git rev-parse --short HEAD`).stdout.trim()
-    p.outro(chalk.green(`✔ rebase 完成 @ ${newHead}`))
+    p.outro(chalk.green(`✔ rebase done @ ${newHead}`))
   } catch (err) {
-    p.cancel(`rebase 失败: ${err.message}`)
+    p.cancel(`Rebase failed: ${err.message}`)
     console.error(err.stderr?.toString() || err.message)
     process.exit(1)
   }
@@ -188,7 +188,7 @@ async function previewConflicts(ref) {
     // 输出: tree OID + 冲突文件名列表 + 空行 + Auto-merging 等信息行，只取空行前段
     return res.stdout.split('\n\n')[0].trim().split('\n').slice(1).filter(Boolean)
   }
-  throw new Error(`merge-tree 执行失败: ${res.stderr}`)
+  throw new Error(`merge-tree failed: ${res.stderr}`)
 }
 
 /** rebase 是否进行中（merge 或 apply 后端） */
@@ -201,17 +201,17 @@ async function inRebase() {
 /** 源码冲突：列文件 + 打开 lazygit（若有），交人解决 */
 async function handOverToHuman(conflicted) {
   const locks = conflicted.filter(isLockfile)
-  p.log.warn(`源码冲突 ${conflicted.length - locks.length} 个文件，需要手动解决:`)
+  p.log.warn(`Source conflicts in ${conflicted.length - locks.length} file(s), manual resolution required:`)
   p.note(
     conflicted
-      .map((f) => `${isLockfile(f) ? chalk.yellow('↻ 锁文件（可 rm + 重装）') : chalk.red('✎ 手动解决')} ${f}`)
+      .map((f) => `${isLockfile(f) ? chalk.yellow('↻ lockfile (rm + reinstall)') : chalk.red('✎ manual')} ${f}`)
       .join('\n')
   )
   if (commandExists('lazygit')) {
-    p.log.info('启动 lazygit，解决冲突后 add + rebase --continue')
+    p.log.info('Launching lazygit — resolve, add, then rebase --continue')
     spawnSync('lazygit', [], { stdio: 'inherit' })
   } else {
-    p.log.info('解决后: git add <files> && git rebase --continue ｜ 放弃: git rebase --abort')
+    p.log.info('After resolving: git add <files> && git rebase --continue | abort: git rebase --abort')
   }
 }
 
