@@ -61,6 +61,11 @@ VERSION UPGRADE DETECTION:
 
 ---
 
+ADDITIONAL USER INSTRUCTIONS (highest priority — follow these when writing title and description):
+{{EXTRA_HINT}}
+
+---
+
 Branch commits:
 {{COMMITS}}
 
