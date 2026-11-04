@@ -158,20 +158,45 @@ export async function run(args) {
     }
     pushSpinner.stop(shouldPush ? 'Branch pushed.' : 'Branch updated.')
 
-    // 10. Check if PR already exists
+    // 10. Check if PR already exists (any state: OPEN / CLOSED / MERGED)
     let prUrl = null
-    let prExists = false
+    let prState = null
     try {
-      const existing = await $`gh pr view ${currentBranch} --json url --jq .url`
-      prUrl = existing.stdout.trim()
-      prExists = true
+      const existing = await $`gh pr view ${currentBranch} --json url,state --jq '[.url, .state] | join(" ")'`
+      const parts = existing.stdout.trim().split(' ')
+      prUrl = parts[0]
+      prState = parts[1]
     } catch {
       // No existing PR
     }
 
-    // 11. If PR exists, skip AI generation and just update the PR
+    // 10.1 Decide what to do with an existing PR
+    let prAction = 'create' // 'create' | 'update' | 'reopen'
+    if (prState === 'OPEN') {
+      prAction = 'update'
+    } else if (prState === 'CLOSED' || prState === 'MERGED') {
+      if (autoPR === true) {
+        prAction = 'create' // non-interactive: a closed/merged PR cannot be reused
+      } else {
+        p.note(prUrl, `Existing ${prState === 'CLOSED' ? 'closed' : 'merged'} PR for this branch`)
+        const options = [
+          { value: 'create', label: 'Create a new PR', hint: 'previous PR stays as-is' },
+        ]
+        if (prState === 'CLOSED') {
+          options.push({ value: 'reopen', label: 'Reopen & update that PR', hint: 'resume the closed PR' })
+        }
+        const choice = await p.select({
+          message: 'What do you want to do?',
+          options,
+        })
+        if (p.isCancel(choice)) { p.cancel('Cancelled.'); process.exit(0) }
+        prAction = choice
+      }
+    }
+
+    // 11. Reuse existing PR content when updating / reopening; generate fresh for new PR
     let prContent
-    if (prExists) {
+    if (prAction !== 'create') {
       const fetchSpinner = p.spinner()
       fetchSpinner.start('Pull Request already exists, fetching current content...')
       try {
@@ -204,7 +229,7 @@ export async function run(args) {
 
     // 12.1 E2E tag selection (only for new PRs)
     const e2eTags = config.get('git.e2eTags') || []
-    if (e2eTags.length > 0 && !prExists && autoPR !== true && !dryRun) {
+    if (e2eTags.length > 0 && prAction === 'create' && autoPR !== true && !dryRun) {
       const selectedTags = await p.multiselect({
         message: 'Select E2E tags for this PR (optional):',
         options: e2eTags.map(tag => ({ label: tag, value: tag })),
@@ -225,7 +250,7 @@ export async function run(args) {
     // 12.2 Label selection (only for new PRs)
     const prLabels = config.get('git.prLabels') || []
     let selectedLabels = []
-    if (prLabels.length > 0 && !prExists && autoPR !== true && !dryRun) {
+    if (prLabels.length > 0 && prAction === 'create' && autoPR !== true && !dryRun) {
       let remoteLabels = []
       try {
         const labelResult = await $`gh label list --json name --jq '.[].name'`
@@ -248,7 +273,7 @@ export async function run(args) {
     }
 
     // 12.3 Open editor (unless --no-edit, --dry-run, autoPR, or PR already exists)
-    if (!noEdit && !dryRun && autoPR !== true && !prExists) {
+    if (!noEdit && !dryRun && autoPR !== true && prAction === 'create') {
       const tmpFile = `/tmp/qk-pr-${Date.now()}.md`
       const editorContent = [
         '# PR Title',
@@ -296,7 +321,7 @@ export async function run(args) {
 
     // 12.5 Ask PR type (always ask for new PR)
     let isDraft = false
-    if (!prExists) {
+    if (prAction === 'create') {
       const prType = await p.select({
         message: 'Create a draft or ready PR?',
         options: [
@@ -309,7 +334,7 @@ export async function run(args) {
     }
 
     // 13. Confirm (skip if autoPR is true or PR already exists)
-    if (autoPR !== true && !prExists) {
+    if (autoPR !== true && prAction === 'create') {
       const ok = await p.confirm({ message: 'Create Pull Request?', initialValue: true })
       if (p.isCancel(ok) || !ok) {
         p.cancel('Cancelled.')
@@ -322,7 +347,12 @@ export async function run(args) {
     writeFileSync(bodyFile, prContent.description, 'utf-8')
 
     const actionSpinner = p.spinner()
-    if (prExists) {
+    if (prAction === 'reopen') {
+      actionSpinner.start('Reopening existing Pull Request...')
+      await $`gh pr reopen ${currentBranch}`
+      actionSpinner.stop('Pull Request reopened.')
+    }
+    if (prAction !== 'create') {
       actionSpinner.start('Updating existing Pull Request...')
       await $`gh pr edit ${currentBranch} --title ${prContent.title} --body-file ${bodyFile}`
       actionSpinner.stop('Pull Request updated.')
