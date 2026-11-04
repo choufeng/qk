@@ -111,3 +111,6 @@ dist/
 build/
 docs/plans/
 .worktrees/
+
+# Fabric runtime
+.pi/fabric/
