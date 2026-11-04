@@ -87,7 +87,7 @@ export async function run(args) {
     if (preview === null) {
       p.log.warn('Git < 2.38, merge-tree unavailable. Skipping pre-check, rebasing directly (auto-handling still applies)')
     } else if (preview.length === 0) {
-      p.log.success('Pre-check clean, rebasing directly')
+      p.log.info('Pre-check clean (dry-run, no conflicts expected) — starting rebase')
     } else {
       const locks = preview.filter(isLockfile)
       const others = preview.filter((f) => !isLockfile(f))
@@ -105,7 +105,12 @@ export async function run(args) {
     }
 
     // ── 3. rebase + 冲突分类处理 ────────────────────────────
-    await $`git rebase --autostash ${rebaseRef}`.nothrow().quiet()
+    const rb = await $`git rebase --autostash ${rebaseRef}`.nothrow().quiet()
+    if (rb.exitCode !== 0 && !(await inRebase())) {
+      const reason = (rb.stderr || '').toString().trim().split('\n').filter(Boolean).pop() || `exit ${rb.exitCode}`
+      p.cancel(`Rebase failed before starting: ${reason}`)
+      process.exit(1)
+    }
 
     while (await inRebase()) {
       const conflicted = (await $`git diff --name-only --diff-filter=U`).stdout
@@ -130,8 +135,8 @@ export async function run(args) {
           .split('\n')
           .filter(Boolean)
         if (after.some((f) => !isLockfile(f))) {
-          p.log.info('Resolve remaining source conflicts, then git add + git rebase --continue (abort: git rebase --abort)')
-          return
+          p.cancel('Source conflicts unresolved — rebase paused. Finish: git add <files> && git rebase --continue | abort: git rebase --abort')
+          process.exit(1)
         }
         continue
       }
@@ -145,15 +150,20 @@ export async function run(args) {
       const res = await $`${installCmd.split(' ')}`.nothrow()
       if (res.exitCode !== 0) {
         await handOverToHuman(conflicted)
-        p.log.error('Install failed, resolve manually then git rebase --continue')
-        return
+        p.cancel('Lockfile install failed — rebase paused. Fix, then git add <files> && git rebase --continue | abort: git rebase --abort')
+        process.exit(1)
       }
       await $`git add ${conflicted}`
       await $`GIT_EDITOR=true git rebase --continue`.nothrow().quiet()
     }
 
+    const done = await $`git merge-base --is-ancestor ${rebaseRef} HEAD`.nothrow().quiet()
     const newHead = (await $`git rev-parse --short HEAD`).stdout.trim()
-    p.outro(chalk.green(`✔ rebase done @ ${newHead}`))
+    if (done.exitCode !== 0) {
+      p.cancel(`Rebase did not complete — HEAD @ ${newHead} is not on top of ${rebaseRef}. Check git status / git rebase --abort`)
+      process.exit(1)
+    }
+    p.outro(chalk.green(`✔ rebase done @ ${newHead} (${branch} is now on top of ${rebaseRef})`))
   } catch (err) {
     p.cancel(`Rebase failed: ${err.message}`)
     console.error(err.stderr?.toString() || err.message)
